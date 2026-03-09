@@ -289,7 +289,9 @@ export default function DriverDashboardScreen() {
           return;
         }
 
-        const baseUrl = getApiUrl();
+        let baseUrl = getApiUrl();
+        if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
         console.log('[TRACKING] Connecting to socket at:', baseUrl);
         socket = io(baseUrl, {
           path: '/socket.io',

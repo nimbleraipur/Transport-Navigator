@@ -1,0 +1,14 @@
+diff --git a/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/CorsMiddleware.js b/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/CorsMiddleware.js
+index 1234567..abcdefg 100644
+--- a/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/CorsMiddleware.js
++++ b/node_modules/expo/node_modules/@expo/cli/build/src/start/server/middleware/CorsMiddleware.js
+@@ -56,7 +56,8 @@ function createCorsMiddleware(exp) {
+             const { host, hostname } = new URL(req.headers.origin);
+             const isSameOrigin = host === req.headers.host;
+             const isLocalhost = _isLocalHostname(hostname);
+-            const isAllowedHost = allowedHosts.includes(host) || isLocalhost;
++            const isReplitHost = hostname.endsWith('.replit.dev') || hostname.endsWith('.repl.co');
++            const isAllowedHost = allowedHosts.includes(host) || isLocalhost || isReplitHost;
+             if (!isSameOrigin && !isAllowedHost) {
+                 next(new Error(`Unauthorized request from ${req.headers.origin}. ` + 'This may happen because of a conflicting browser extension to intercept HTTP requests. ' + 'Disable browser extensions or use incognito mode and try again.'));
+                 return;

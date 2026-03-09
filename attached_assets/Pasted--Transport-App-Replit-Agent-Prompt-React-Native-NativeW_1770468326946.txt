@@ -1,0 +1,623 @@
+# 🚀 Transport App - Replit Agent Prompt (React Native + NativeWind)
+
+## Project Type: React Native Mobile App (JavaScript + Tailwind CSS)
+
+---
+
+## 📱 COMPLETE PROMPT FOR REPLIT AGENT
+
+```
+Create a complete transport/logistics mobile application using React Native with JavaScript and NativeWind (Tailwind CSS for React Native).
+
+PROJECT SETUP:
+- Initialize React Native project (JavaScript - NO TypeScript)
+- Install and configure NativeWind for Tailwind CSS classes
+- Setup React Navigation for routing
+- Configure AsyncStorage for data persistence
+- Install React Native Maps
+- Setup all dependencies
+
+IMPORTANT PACKAGES TO INSTALL:
+npm install nativewind
+npm install --save-dev tailwindcss@3.3.2
+npm install @react-navigation/native @react-navigation/stack
+npm install react-native-screens react-native-safe-area-context react-native-gesture-handler
+npm install @react-native-async-storage/async-storage
+npm install react-native-maps
+
+CONFIGURE NATIVEWIND:
+1. Create tailwind.config.js:
+   - content: ["./App.{js,jsx}", "./src/**/*.{js,jsx}"]
+   
+2. Update babel.config.js:
+   - Add plugins: ['nativewind/babel']
+
+3. Create global.css if needed
+
+APP STRUCTURE:
+Create this exact folder structure:
+TransportApp/
+├── src/
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   ├── LoginScreen.js
+│   │   │   └── RegisterScreen.js
+│   │   ├── customer/
+│   │   │   ├── CustomerHomeScreen.js
+│   │   │   ├── NewBookingScreen.js
+│   │   │   ├── TrackRideScreen.js
+│   │   │   └── BookingHistoryScreen.js
+│   │   └── driver/
+│   │       ├── DriverDashboardScreen.js
+│   │       ├── RideRequestsScreen.js
+│   │       └── ActiveRideScreen.js
+│   ├── contexts/
+│   │   ├── AuthContext.js
+│   │   └── BookingContext.js
+│   ├── utils/
+│   │   └── pricing.js
+│   └── App.js
+├── App.js
+├── package.json
+├── tailwind.config.js
+└── babel.config.js
+
+FEATURES TO IMPLEMENT:
+
+1. AUTHENTICATION SYSTEM:
+   - Login screen with:
+     * Phone number input (10 digits)
+     * Password input
+     * Role selector (Customer/Driver toggle buttons)
+     * Demo credentials display
+     * Register link
+   
+   - Register screen with:
+     * Name, Phone, Email, Password
+     * Role selection
+     * For Drivers: Vehicle type, Vehicle number, License number
+     * Form validation
+   
+   - Use AsyncStorage to store users array
+   - Demo credentials:
+     * Customer: 9876543210 / password
+     * Driver: 9876543211 / password
+
+2. CUSTOMER MODULE:
+   
+   a) Customer Home Screen:
+      - Header with user name and logout button
+      - Map placeholder (gradient background or MapView)
+      - Active booking banner (if exists) with "Track" button
+      - "Book a Ride" primary button (gradient blue-purple)
+      - "History" and "Profile" secondary buttons
+   
+   b) New Booking Screen:
+      - Map showing route
+      - Pickup location selector (dropdown with mock locations)
+      - Delivery location selector
+      - Distance display (auto-calculated)
+      - 3 Vehicle type cards:
+        * Auto: 🛺 Base ₹50 + ₹10/km, Up to 200kg
+        * Tempo: 🚐 Base ₹100 + ₹10/km, Up to 1000kg
+        * Truck: 🚚 Base ₹200 + ₹10/km, 1000kg+
+      - Price breakdown
+      - "Confirm Booking" button
+   
+   c) Track Ride Screen:
+      - Map with markers
+      - Driver details card (if assigned)
+      - Trip status indicator
+      - OTP display (4 digits) when trip is in_progress
+      - Pickup and delivery addresses
+      - Distance and fare
+   
+   d) Booking History Screen:
+      - List of all bookings (FlatList)
+      - Each card shows: ID, status badge, locations, vehicle, date, price
+      - Empty state: "No bookings yet"
+
+3. DRIVER MODULE:
+   
+   a) Driver Dashboard:
+      - Header with name and logout
+      - Large Online/Offline toggle button
+        * Green gradient when online
+        * Gray when offline
+      - 3 Stats cards (grid):
+        * Today's earnings (₹)
+        * Total trips
+        * Rating (stars)
+      - Map view
+      - "New Requests" button (if pending requests exist) - orange, pulsing
+      - "View Active Ride" button (if active trip)
+      - "Waiting for requests..." when online but no requests
+   
+   b) Ride Requests Screen:
+      - Orange header with "New Ride Request"
+      - 60-second countdown timer (large, animated)
+      - Customer details
+      - Pickup location
+      - Delivery location
+      - Distance and vehicle type
+      - Earnings card (highlighted with green border):
+        * Large price display
+        * Breakdown: Base + distance calculation
+      - "Accept Request" button (green)
+      - "Reject Request" button (red)
+      - Auto-navigate back if timer reaches 0
+   
+   c) Active Ride Screen:
+      - Map with route
+      - Status banner (blue)
+      - Customer details with call button
+      - Target location (pickup or delivery based on status)
+      - Trip details
+      - For "accepted" status:
+        * OTP input (4 digits)
+        * "Start Trip" button
+        * Validate OTP before starting
+      - For "in_progress" status:
+        * "Complete Trip" button
+        * Confirmation dialog
+
+4. BUSINESS LOGIC:
+   
+   Pricing calculation:
+   const VEHICLE_PRICING = {
+     auto: { base: 50, perKm: 10, name: 'Auto', capacity: 'Up to 200kg' },
+     tempo: { base: 100, perKm: 10, name: 'Tempo', capacity: 'Up to 1000kg' },
+     truck: { base: 200, perKm: 10, name: 'Truck', capacity: '1000kg+' }
+   };
+   
+   const calculatePrice = (vehicleType, distance) => {
+     const pricing = VEHICLE_PRICING[vehicleType];
+     return {
+       basePrice: pricing.base,
+       perKmCharge: pricing.perKm,
+       totalPrice: pricing.base + (distance * pricing.perKm)
+     };
+   };
+   
+   Distance calculation (Haversine formula):
+   const calculateDistance = (from, to) => {
+     const R = 6371;
+     const dLat = toRad(to.lat - from.lat);
+     const dLng = toRad(to.lng - from.lng);
+     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+               Math.cos(toRad(from.lat)) * Math.cos(toRad(to.lat)) *
+               Math.sin(dLng/2) * Math.sin(dLng/2);
+     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+     return Math.round(R * c * 10) / 10;
+   };
+   
+   OTP generation:
+   const generateOTP = () => {
+     return Math.floor(1000 + Math.random() * 9000).toString();
+   };
+
+5. DATA STORAGE (AsyncStorage):
+   
+   Store these keys:
+   - 'users' → Array of all users
+   - 'currentUser' → Currently logged in user
+   - 'bookings' → Array of all bookings
+   - 'driver_[id]_online' → Driver online status (boolean)
+   
+   Pre-populate with demo users on first launch
+
+6. MOCK DATA:
+   
+   Demo users:
+   [
+     {
+       id: '1',
+       name: 'Rahul Kumar',
+       phone: '9876543210',
+       email: 'customer@demo.com',
+       password: 'password',
+       role: 'customer'
+     },
+     {
+       id: '2',
+       name: 'Vijay Singh',
+       phone: '9876543211',
+       email: 'driver@demo.com',
+       password: 'password',
+       role: 'driver',
+       vehicleType: 'auto',
+       vehicleNumber: 'MP 09 AB 1234',
+       licenseNumber: 'DL1234567890',
+       isOnline: false,
+       rating: 4.5,
+       totalTrips: 0
+     }
+   ]
+   
+   Mock locations (Indore):
+   [
+     { name: 'Indore Railway Station', lat: 22.7196, lng: 75.8577 },
+     { name: 'Treasure Island Mall', lat: 22.7532, lng: 75.8937 },
+     { name: 'Rajwada Palace', lat: 22.7196, lng: 75.8577 },
+     { name: 'Sarafa Bazaar', lat: 22.7196, lng: 75.8577 }
+   ]
+
+7. TAILWIND CLASSES (NativeWind):
+   
+   Use these exact Tailwind classes:
+   
+   Buttons:
+   - Primary: "bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-2xl font-bold shadow-xl"
+   - Secondary: "bg-gray-100 text-gray-800 py-3 px-4 rounded-xl font-semibold"
+   - Success: "bg-green-500 text-white py-4 px-6 rounded-2xl font-bold"
+   - Danger: "bg-red-500 text-white py-4 px-6 rounded-2xl font-bold"
+   
+   Cards:
+   - "bg-white rounded-2xl shadow-lg p-4 border-2 border-gray-100"
+   
+   Inputs:
+   - "bg-white px-4 py-3 border-2 border-gray-200 rounded-xl text-base"
+   
+   Status badges:
+   - Completed: "bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold"
+   - Pending: "bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold"
+   
+   Layout:
+   - Container: "flex-1 bg-gray-50"
+   - Header: "bg-white shadow-md p-4"
+   - Section spacing: "p-4 space-y-4"
+
+8. NAVIGATION SETUP:
+   
+   Stack Navigator with these routes:
+   - Login
+   - Register
+   - CustomerHome
+   - NewBooking
+   - TrackRide
+   - BookingHistory
+   - DriverDashboard
+   - RideRequests
+   - ActiveRide
+   
+   Protected routes based on authentication and role
+
+9. STATE MANAGEMENT:
+   
+   Create two contexts:
+   
+   AuthContext:
+   - user (current user object or null)
+   - login(phone, password, role)
+   - register(userData)
+   - logout()
+   - isAuthenticated (boolean)
+   - loading (boolean)
+   
+   BookingContext:
+   - bookings (array)
+   - activeBooking (object or null)
+   - createBooking(pickup, delivery, vehicleType)
+   - acceptBooking(bookingId, driverId)
+   - startTrip(bookingId, otp)
+   - completeTrip(bookingId)
+   - cancelBooking(bookingId)
+   - getCustomerBookings(customerId)
+   - getDriverRequests(vehicleType)
+
+10. WORKFLOW:
+    
+    Customer Flow:
+    Login → Home → New Booking → Select locations → Choose vehicle → 
+    See price → Confirm → Track (wait for driver) → Driver accepts → 
+    Track driver → Share OTP → Trip starts → Trip completes → Payment
+    
+    Driver Flow:
+    Login → Dashboard → Go Online → Wait for requests → 
+    Request notification (60s timer) → View details → Accept → 
+    Navigate to pickup → Get OTP from customer → Verify OTP → 
+    Start trip → Navigate to delivery → Complete trip → Earnings added
+
+STYLING REQUIREMENTS:
+- Use NativeWind classes throughout (className prop)
+- Mobile-first design
+- Consistent spacing (4, 8, 16, 24, 32px)
+- Color scheme:
+  * Primary: Blue (#2563EB)
+  * Success: Green (#10B981)
+  * Warning: Orange (#F59E0B)
+  * Danger: Red (#EF4444)
+  * Background: Gray (#F9FAFB)
+- Rounded corners: 12px (rounded-xl), 16px (rounded-2xl)
+- Shadows for elevation
+- Gradient backgrounds for important buttons
+- Smooth transitions and animations
+
+IMPORTANT NOTES:
+1. Use JavaScript ONLY (no TypeScript)
+2. NativeWind for Tailwind classes
+3. AsyncStorage for persistence
+4. All features must be FULLY FUNCTIONAL
+5. Demo credentials must work
+6. Price calculation must be accurate
+7. OTP verification must work
+8. Navigation must be smooth
+9. No console errors
+10. Test on both iOS and Android (if possible)
+
+ERROR HANDLING:
+- Show alerts for errors
+- Validate all inputs
+- Handle network failures gracefully
+- Show loading states
+- Empty states for lists
+
+PERFORMANCE:
+- Use FlatList for long lists
+- Lazy load screens
+- Optimize re-renders
+- Memoize expensive calculations
+
+TESTING CHECKLIST:
+□ Login with customer credentials works
+□ Login with driver credentials works
+□ Register new user works
+□ Customer can create booking
+□ Price calculation is correct
+□ Driver can see requests
+□ 60-second timer works
+□ Accept request works
+□ OTP verification works
+□ Trip completion works
+□ Booking history shows data
+□ AsyncStorage persists data
+□ Navigation works smoothly
+□ All buttons are clickable
+□ Forms validate properly
+
+BUILD THE COMPLETE APP WITH ALL FEATURES WORKING!
+Make it production-ready and ensure everything functions perfectly.
+```
+
+---
+
+## 🎯 REPLIT-SPECIFIC INSTRUCTIONS
+
+### After pasting prompt, tell Replit Agent:
+
+```
+Additional Instructions:
+
+1. First run: npx react-native init TransportApp
+2. Then install ALL dependencies listed above
+3. Configure NativeWind properly in babel.config.js
+4. Create the folder structure exactly as specified
+5. Build all screens one by one
+6. Test each feature after building
+7. Fix any errors immediately
+8. Ensure AsyncStorage works
+9. Make sure navigation is set up correctly
+10. Test with demo credentials
+
+Start with authentication, then customer module, then driver module.
+Build it step by step but make everything functional.
+```
+
+---
+
+## 📱 EXPECTED OUTPUT
+
+Replit Agent will create:
+
+```
+TransportApp/
+├── android/
+├── ios/
+├── src/
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   ├── LoginScreen.js ✅
+│   │   │   └── RegisterScreen.js ✅
+│   │   ├── customer/
+│   │   │   ├── CustomerHomeScreen.js ✅
+│   │   │   ├── NewBookingScreen.js ✅
+│   │   │   ├── TrackRideScreen.js ✅
+│   │   │   └── BookingHistoryScreen.js ✅
+│   │   └── driver/
+│   │       ├── DriverDashboardScreen.js ✅
+│   │       ├── RideRequestsScreen.js ✅
+│   │       └── ActiveRideScreen.js ✅
+│   ├── contexts/
+│   │   ├── AuthContext.js ✅
+│   │   └── BookingContext.js ✅
+│   ├── utils/
+│   │   └── pricing.js ✅
+│   └── App.js ✅
+├── package.json ✅
+├── tailwind.config.js ✅
+├── babel.config.js ✅
+└── README.md
+```
+
+---
+
+## 🔧 TROUBLESHOOTING PROMPTS
+
+If something doesn't work, use these follow-up prompts:
+
+### NativeWind not working:
+```
+"NativeWind classes are not applying. Please verify:
+1. tailwind.config.js has correct content paths
+2. babel.config.js has 'nativewind/babel' in plugins
+3. All components use className prop (not style)
+4. Restart metro bundler after config changes"
+```
+
+### Navigation errors:
+```
+"Navigation is not working. Please check:
+1. @react-navigation packages are installed
+2. NavigationContainer wraps the app
+3. Stack.Navigator is set up correctly
+4. All screen names match in navigation.navigate() calls"
+```
+
+### AsyncStorage issues:
+```
+"AsyncStorage is not persisting data. Please:
+1. Verify @react-native-async-storage/async-storage is installed
+2. Check import statement is correct
+3. Use JSON.stringify when setting
+4. Use JSON.parse when getting
+5. Add error handling with try-catch"
+```
+
+### Styling issues:
+```
+"Tailwind classes not matching design. Update:
+1. Primary buttons: bg-gradient-to-r from-blue-600 to-purple-600
+2. Card spacing: p-4 not p-6
+3. Border radius: rounded-2xl not rounded-lg
+4. Text sizes: text-lg for buttons, text-sm for labels"
+```
+
+---
+
+## ✅ VERIFICATION STEPS
+
+After Replit builds the app:
+
+### 1. Test Login:
+```
+1. Open app
+2. Select "Customer"
+3. Phone: 9876543210
+4. Password: password
+5. Click Login
+6. Should navigate to CustomerHome ✅
+```
+
+### 2. Test Booking:
+```
+1. Click "Book a Ride"
+2. Select pickup: Indore Railway Station
+3. Select delivery: Treasure Island Mall
+4. Distance should show (4.3 km)
+5. Select Auto
+6. Price should show ₹93
+7. Click Confirm
+8. Should navigate to Track screen ✅
+```
+
+### 3. Test Driver:
+```
+1. Logout
+2. Login as Driver (9876543211/password)
+3. Click "Go Online"
+4. Should see "Waiting for requests..."
+5. Create booking from customer account
+6. Driver should see "New Request" ✅
+```
+
+### 4. Test OTP:
+```
+1. Driver accepts request
+2. Customer sees OTP (e.g., 1234)
+3. Driver navigates to ActiveRide
+4. Driver enters OTP: 1234
+5. Trip should start ✅
+```
+
+---
+
+## 🚀 QUICK START TEMPLATE
+
+**Copy and paste this ENTIRE prompt into Replit Agent:**
+
+```
+Build a complete React Native transport app with JavaScript and NativeWind (Tailwind CSS).
+
+Setup:
+- React Native (JavaScript - NO TypeScript)
+- NativeWind for Tailwind classes
+- React Navigation
+- AsyncStorage
+- React Native Maps
+
+Features:
+1. Login/Register (Customer + Driver)
+2. Customer: Book rides, track driver, history
+3. Driver: Online/offline, accept requests, complete trips
+4. 3 vehicles: Auto ₹50, Tempo ₹100, Truck ₹200 (+ ₹10/km each)
+5. OTP verification
+6. Real-time updates
+7. AsyncStorage persistence
+
+Screens (8 total):
+- LoginScreen.js
+- RegisterScreen.js
+- CustomerHomeScreen.js
+- NewBookingScreen.js
+- TrackRideScreen.js
+- BookingHistoryScreen.js
+- DriverDashboardScreen.js
+- RideRequestsScreen.js
+- ActiveRideScreen.js
+
+Use NativeWind Tailwind classes:
+- Buttons: "bg-blue-600 text-white py-4 rounded-2xl font-bold"
+- Cards: "bg-white rounded-2xl shadow-lg p-4"
+- Inputs: "bg-white px-4 py-3 border-2 rounded-xl"
+
+Demo credentials:
+- Customer: 9876543210 / password
+- Driver: 9876543211 / password
+
+Build folder structure:
+src/screens/auth/, src/screens/customer/, src/screens/driver/
+src/contexts/, src/utils/
+
+Make EVERYTHING functional:
+- Login works
+- Booking creation works
+- Price calculation accurate
+- Driver request acceptance
+- OTP verification
+- Trip completion
+- Data persists in AsyncStorage
+
+Configure NativeWind properly in babel.config.js and tailwind.config.js
+
+BUILD COMPLETE APP NOW!
+```
+
+---
+
+## 💡 PRO TIPS FOR REPLIT
+
+1. **Be Patient:** React Native setup takes 5-10 minutes
+2. **Check Logs:** Monitor Replit console for errors
+3. **Incremental Build:** Let it build auth first, then customer, then driver
+4. **Test Early:** Test each screen as it's built
+5. **Fix Immediately:** Don't let errors pile up
+
+---
+
+## 📊 SUCCESS CRITERIA
+
+App is complete when:
+- ✅ Runs without errors
+- ✅ All 8 screens exist
+- ✅ Login works with demo credentials
+- ✅ Customer can create booking
+- ✅ Price calculated correctly
+- ✅ Driver can accept request
+- ✅ OTP verification works
+- ✅ Trip completes successfully
+- ✅ Data persists after app restart
+- ✅ Tailwind classes apply properly
+
+---
+
+**Paste prompt into Replit Agent and get a complete working app! 🚀**

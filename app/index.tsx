@@ -234,7 +234,7 @@ export default function LoginScreen() {
                 style={{ opacity: phoneOpacity, transform: [{ translateX: phoneTranslateX }] }}
                 pointerEvents={otpSent ? 'none' : 'auto'}
               >
-                <Text className="text-[9px] font-inter-bold text-white/30 mb-4 uppercase tracking-[2px]">Terminal Authentication</Text>
+                <Text className="text-[9px] font-inter-bold text-white/30 mb-4 uppercase tracking-[2px]">Enter Mobile Number</Text>
                 <View className="flex-row items-center mb-6">
                   <View className="w-14 h-14 rounded-xl bg-white/5 items-center justify-center border border-white/10 mr-3">
                     <Text className="text-base font-inter-bold text-surface">+91</Text>
@@ -291,13 +291,7 @@ export default function LoginScreen() {
                   <Text className="text-accent font-inter-bold">+91 {phone}</Text>
                 </Text>
 
-                {sentOtpValue ? (
-                  <View className="bg-accent/10 py-2 rounded-xl mb-6 border border-accent/20">
-                    <Text className="text-[10px] font-inter-bold text-accent text-center uppercase tracking-widest">
-                      Dev Portal OTP: {sentOtpValue}
-                    </Text>
-                  </View>
-                ) : null}
+
 
                 <TextInput
                   className="h-14 rounded-xl bg-white/5 px-4 text-3xl font-inter-bold text-surface border border-white/10 mb-6 text-center tracking-widest"
@@ -333,13 +327,7 @@ export default function LoginScreen() {
             ) : null}
           </Animated.View>
 
-          <TouchableOpacity
-            className="flex-row items-center justify-center mt-10 opacity-30"
-            onPress={() => WebBrowser.openBrowserAsync(ADMIN_WEB_URL || '')}
-          >
-            <FontAwesome5 name="cog" size={10} color={Colors.surface} />
-            <Text className="text-[11px] font-inter-bold text-surface ml-2 uppercase tracking-widest">Terminal Console</Text>
-          </TouchableOpacity>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

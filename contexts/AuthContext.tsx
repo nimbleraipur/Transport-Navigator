@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const baseUrl = getApiUrl();
       const url = new URL(path, baseUrl);
-      console.log(`[API] ${path} -> ${url.toString()}`);
+      // console.log(`[API] ${path} -> ${url.toString()}`);
       const res = await fetch(url.toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       clearTimeout(timeoutId);
       const data = await res.json();
-      console.log(`[API] ${path} response:`, JSON.stringify(data).substring(0, 200));
+      // console.log(`[API] ${path} response:`, JSON.stringify(data).substring(0, 200));
       return data;
     } catch (e: any) {
       clearTimeout(timeoutId);

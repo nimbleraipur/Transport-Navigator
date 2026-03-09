@@ -6,7 +6,7 @@ const IS_DRIVER = APP_MODE === 'driver';
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: IS_DRIVER ? 'My Load 24 Driver' : 'My Load 24',
-  slug: IS_DRIVER ? 'my-load-24-driver' : 'my-load-24',
+  slug: 'my-load-24', // Must match the project ID on Expo dashboard
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',

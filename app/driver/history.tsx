@@ -74,6 +74,13 @@ function AnimatedBookingCard({ booking, index }: { booking: BookingData; index: 
           </View>
         </View>
 
+        {booking.status === 'cancelled' && booking.cancelReason && (
+          <View className="px-1 mb-4 flex-row items-center border-l-2 border-danger pl-3">
+            <Ionicons name="alert-circle-outline" size={14} color={Colors.danger} />
+            <Text className="ml-2 text-[11px] font-inter-semibold text-danger/70 italic">Aborted: {booking.cancelReason}</Text>
+          </View>
+        )}
+
         <View className="flex-row items-center justify-between px-1">
           <View className="flex-row items-center space-x-5">
             <View className="flex-row items-center">

@@ -13,7 +13,9 @@
     "lint": "npx expo lint",
     "lint:fix": "npx expo lint --fix",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "build:customer": "eas build --profile customer --platform android",
+    "build:driver": "eas build --profile driver --platform android"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -41,6 +43,7 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.10",
     "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.16",
     "expo-router": "^6.0.23",
     "expo-splash-screen": "~31.0.12",
     "expo-status-bar": "~3.0.9",

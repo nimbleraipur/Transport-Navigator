@@ -10,17 +10,18 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   StatusBar,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, Feather, MaterialCommunityIcons, AntDesign } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBookings } from '@/contexts/BookingContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import Colors from '@/constants/colors';
-import Map from '@/components/Map';
+import Map, { MapRef } from '@/components/Map';
 
 function PulsingDot() {
   // Removing Animated.View to prevent nativewind unmount crashes during rapid state switches
@@ -41,6 +42,7 @@ export default function CustomerHomeScreen() {
   const { user } = useAuth();
   const { bookings, fetchBookings, getActiveBooking } = useBookings();
   const { unreadCount } = useNotifications();
+  const mapRef = useRef<MapRef>(null);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
@@ -100,7 +102,7 @@ export default function CustomerHomeScreen() {
           transform: [{ scale: mapScale }]
         }}
       >
-        {isFocused && <Map />}
+        {isFocused && <Map ref={mapRef} />}
         <LinearGradient
           colors={['rgba(8, 18, 32, 0.9)', 'rgba(8, 18, 32, 0)']}
           style={StyleSheet.absoluteFill}
@@ -123,8 +125,12 @@ export default function CustomerHomeScreen() {
             onPress={() => router.push('/customer/menu' as any)}
             activeOpacity={0.7}
           >
-            <View className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center border border-white/10">
-              <Ionicons name="person" size={20} color={Colors.surface} />
+            <View className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center border border-white/10 overflow-hidden">
+              {user?.profileSelfie ? (
+                <Image source={{ uri: user.profileSelfie }} className="w-full h-full" resizeMode="cover" />
+              ) : (
+                <Ionicons name="person" size={20} color={Colors.surface} />
+              )}
             </View>
             <View className="ml-3">
               <Text className="text-[9px] font-inter-bold text-white/40 uppercase tracking-[1.5px]">Premium User</Text>
@@ -258,6 +264,30 @@ export default function CustomerHomeScreen() {
           </View> */}
         </ScrollView>
       </Animated.View>
+
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          right: 20,
+          bottom: 300,
+          width: 52,
+          height: 52,
+          borderRadius: 26,
+          backgroundColor: 'white',
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.15,
+          shadowRadius: 12,
+          elevation: 10,
+          zIndex: 50,
+        }}
+        onPress={() => mapRef.current?.animateToCurrentLocation()}
+        activeOpacity={0.8}
+      >
+        <AntDesign name="aim" size={26} color={Colors.primary} />
+      </TouchableOpacity>
     </View>
   );
 }

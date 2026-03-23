@@ -1,40 +1,52 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Platform, Alert, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Platform, Alert, Animated, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/query-client';
 
 function ProfileField({ label, value, icon, isLocked = false, onChangeText, placeholder }: any) {
-  const [isFocused, setIsFocused] = useState(false);
+  const safeValue = value ? String(value) : '';
 
   return (
-    <View className="mb-5">
-      <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] mb-2.5 ml-1">{label}</Text>
-      <View
-        className={`flex-row items-center px-4 rounded-2xl border ${isFocused ? 'border-primary bg-white shadow-sm' : 'border-gray-50 bg-gray-50/50'}`}
-        style={{ height: 54 }}
-      >
-        <View className="mr-3.5">
-          <Ionicons name={icon} size={18} color={isFocused ? Colors.primary : Colors.divider} />
+    <View style={{ marginBottom: 20 }}>
+      <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#999999', textTransform: 'uppercase', marginBottom: 8, marginLeft: 4 }}>
+        {label}
+      </Text>
+      <View style={{ 
+        flexDirection: 'row', 
+        paddingHorizontal: 16, 
+        borderRadius: 16, 
+        borderWidth: 1, 
+        borderColor: '#F3F4F6', 
+        backgroundColor: isLocked ? '#F9FAFB' : '#FFFFFF',
+        height: 54,
+        alignItems: 'center'
+      }}>
+        <View style={{ marginRight: 14 }}>
+          <Ionicons name={icon} size={18} color={isLocked ? '#999999' : '#000000'} />
         </View>
+        
         {isLocked ? (
-          <Text className="flex-1 text-sm font-inter-semibold text-text-secondary">{value}</Text>
+          <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: '#666666' }}>
+            {safeValue}
+          </Text>
         ) : (
           <TextInput
-            className="flex-1 text-sm font-inter-semibold text-text"
-            value={value}
-            onChangeText={onChangeText}
+            style={{ flex: 1, fontSize: 14, fontWeight: '600', color: '#000000' }}
+            value={safeValue}
+            onChangeText={(t) => onChangeText && onChangeText(t)}
             placeholder={placeholder}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
             placeholderTextColor="rgba(0,0,0,0.2)"
+            autoCorrect={false}
           />
         )}
-        {isLocked && <Ionicons name="lock-closed" size={14} color={Colors.divider} />}
+        
+        {isLocked && <Ionicons name="lock-closed" size={14} color="#999999" />}
       </View>
     </View>
   );
@@ -46,6 +58,7 @@ export default function ProfileScreen() {
   const { user, token, updateUser } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
@@ -59,6 +72,53 @@ export default function ProfileScreen() {
       Animated.spring(slideAnim, { toValue: 0, tension: 40, friction: 8, useNativeDriver: true })
     ]).start();
   }, []);
+
+  const uploadProfilePhoto = async (uri: string) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'profile.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpg`;
+      formData.append('photo', { uri, name: filename, type } as any);
+
+      const baseUrl = getApiUrl();
+      const res = await fetch(`${baseUrl}/api/users/profile-photo`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.user) {
+        updateUser(data.user);
+        Alert.alert('Success', 'Profile photo updated successfully.');
+      } else {
+        Alert.alert('Error', data.error || 'Failed to upload photo.');
+      }
+    } catch (e) {
+      console.error('[PHOTO-UPLOAD-ERROR]', e);
+      Alert.alert('Error', 'Connection failed.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      uploadProfilePhoto(result.assets[0].uri);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -75,7 +135,7 @@ export default function ProfileScreen() {
       });
       const data = await res.json();
       if (data.user) {
-        updateUser({ name: data.user.name });
+        updateUser(data.user);
         Alert.alert('Profile Updated', 'Your changes have been saved successfully');
       }
     } catch (e) {
@@ -88,37 +148,42 @@ export default function ProfileScreen() {
   const memberSince = user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Join Date N/A';
 
   return (
-    <View className="flex-1 bg-[#FDFDFD]">
+    <View className="flex-1 bg-white">
       <LinearGradient
-        colors={[Colors.navyDark, Colors.navyMid]}
-        className="pb-10 rounded-b-[32px] shadow-2xl"
+        colors={['#000000', '#222222']}
+        className="pb-12 rounded-b-[32px] shadow-2xl"
         style={{ paddingTop: topInset + 12 }}
       >
         <View className="flex-row items-center px-6 mb-8">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center border border-white/5"
+            className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center border border-white/10"
           >
-            <Ionicons name="chevron-back" size={20} color={Colors.surface} />
+            <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text className="flex-1 text-center text-lg font-inter-bold text-surface mr-10">Edit Profile</Text>
+          <Text className="flex-1 text-center text-lg font-inter-bold text-white mr-10 uppercase tracking-widest">My Identity</Text>
         </View>
 
         <View className="items-center">
-          <View className="w-24 h-24 rounded-[32px] bg-white/10 items-center justify-center border border-white/20 shadow-2xl relative">
-            <LinearGradient
-              colors={['#1B3A5C', '#132743']}
-              className="w-full h-full rounded-[32px] items-center justify-center"
-            >
-              <Ionicons name="person" size={44} color={Colors.surface} />
-            </LinearGradient>
-            <TouchableOpacity className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-primary border-4 border-[#132743] items-center justify-center shadow-lg">
-              <Ionicons name="camera" size={16} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-          <Text className="text-xl font-inter-bold text-surface mt-5">{user?.name || 'User'}</Text>
-          <View className="bg-accent/20 px-2.5 py-0.5 rounded-full mt-2 border border-accent/20">
-            <Text className="text-[9px] font-inter-bold text-accent uppercase tracking-widest">Premium Member</Text>
+          <TouchableOpacity 
+            onPress={pickImage}
+            disabled={uploading}
+            className="w-24 h-24 rounded-[32px] bg-white/10 items-center justify-center border border-white/20 shadow-2xl relative overflow-hidden"
+          >
+            {uploading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : user?.profileSelfie ? (
+              <Image source={{ uri: user.profileSelfie }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+              <Ionicons name="person" size={44} color="#FFFFFF" />
+            )}
+            <View className="absolute bottom-0 w-full bg-black/40 py-1 items-center">
+              <Ionicons name="camera" size={12} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+          <Text className="text-xl font-inter-bold text-white mt-5">{user?.name || 'User'}</Text>
+          <View className="bg-white/10 px-3 py-1 rounded-full mt-2 border border-white/20">
+            <Text className="text-[9px] font-inter-bold text-white uppercase tracking-widest">Premium Member</Text>
           </View>
         </View>
       </LinearGradient>
@@ -129,7 +194,7 @@ export default function ProfileScreen() {
         style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }] }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="bg-white rounded-[32px] p-6 shadow-2xl shadow-black/5 border border-gray-50">
+        <View className="bg-white rounded-[40px] p-8 shadow-2xl shadow-black/5 border border-gray-100">
           <ProfileField
             label="Full Name"
             value={name}
@@ -152,48 +217,39 @@ export default function ProfileScreen() {
             isLocked={true}
           />
 
-          <View className="mt-1 p-4 bg-gray-50 rounded-2xl border border-gray-100 items-center flex-row">
-            <View className="w-9 h-9 rounded-xl bg-primary/10 items-center justify-center mr-3.5">
-              <MaterialIcons name="event-available" size={18} color={Colors.primary} />
+          <View className="mt-2 p-5 bg-gray-50 rounded-[24px] border border-gray-100 items-center flex-row">
+            <View className="w-10 h-10 rounded-xl bg-black items-center justify-center mr-4">
+              <MaterialIcons name="event-available" size={20} color="#FFFFFF" />
             </View>
             <View>
-              <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-widest">Member Journey</Text>
-              <Text className="text-[13px] font-inter-bold text-text mt-0.5">{memberSince}</Text>
+              <Text className="text-[9px] font-inter-bold text-gray-400 uppercase tracking-[2px]">Member Journey</Text>
+              <Text className="text-sm font-inter-bold text-black mt-0.5">{memberSince}</Text>
             </View>
           </View>
 
           <TouchableOpacity
-            className="mt-8 h-14 rounded-2xl overflow-hidden shadow-2xl shadow-primary/30"
+            className="mt-8 h-16 rounded-[24px] bg-black items-center justify-center flex-row shadow-xl shadow-black/20"
             onPress={handleSave}
             disabled={saving}
-            activeOpacity={0.85}
+            activeOpacity={0.9}
           >
-            <LinearGradient
-              colors={[Colors.primary, Colors.primaryDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              className="flex-1 items-center justify-center flex-row"
-            >
-              {saving ? (
-                <ActivityIndicator color={Colors.surface} />
-              ) : (
-                <>
-                  <Text className="text-base font-inter-bold text-surface mr-3">Sync Changes</Text>
-                  <Feather name="refresh-cw" size={16} color="#FFF" />
-                </>
-              )}
-            </LinearGradient>
+            {saving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Text className="text-sm font-inter-bold text-white mr-3 uppercase tracking-widest">Sync Profile</Text>
+                <Feather name="refresh-cw" size={16} color="#FFFFFF" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
-        <View className="mt-8 px-4 items-center">
-          <Text className="text-xs font-inter-medium text-text-tertiary text-center leading-5">
-            Certain account details are locked for security. Contact support to change your mobile identity.
+        <View className="mt-10 px-6 items-center">
+          <Text className="text-[11px] font-inter-medium text-gray-400 text-center leading-5 opacity-60">
+            Security lock active. Mobile identity changes require administrator intervention.
           </Text>
         </View>
       </Animated.ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({});

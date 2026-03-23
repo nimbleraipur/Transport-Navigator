@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 import React, { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
@@ -14,8 +14,7 @@ import { queryClient } from '@/lib/query-client';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { BookingProvider } from '@/contexts/BookingContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
-
-
+import { Image } from 'expo-image';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,8 +26,14 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
 
   useEffect(() => {
+    // 5 second timer for GIF splash
+    const timer = setTimeout(() => {
+      setSplashFinished(true);
+    }, 5000);
+
     async function loadFonts() {
       const fontPromise = Font.loadAsync({
         Inter_400Regular,
@@ -66,15 +71,27 @@ export default function RootLayout() {
         window.removeEventListener('unhandledrejection', rejectionHandler);
       };
     }
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
     if (ready) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [ready]);
 
-  if (!ready) return null;
+  if (!ready || !splashFinished) {
+    return (
+      <View style={styles.splashContainer}>
+        <Image
+          source={require('../assets/images/splash.gif')}
+          style={styles.splashImage}
+          contentFit="cover"
+          priority="high"
+        />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -94,3 +111,16 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  splashContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  splashImage: {
+    width: '100%',
+    height: '100%',
+  },
+});

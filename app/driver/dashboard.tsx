@@ -10,6 +10,7 @@ import {
   Switch,
   ActivityIndicator,
   Animated,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -162,9 +163,20 @@ function AnimatedActiveCard({
       />
       <TouchableOpacity activeOpacity={1} onPress={onPress}>
         <View className="flex-row items-center justify-between mb-4">
-          <View className="flex-row items-center">
-            <View className="w-2.5 h-2.5 rounded-full bg-primary mr-3" />
-            <Text className="text-base font-inter-bold text-text tracking-tight">Ongoing Journey</Text>
+          <View className="flex-row items-center flex-1">
+            <View className="w-10 h-10 rounded-full bg-gray-100 mr-3 border border-gray-100 overflow-hidden">
+              {booking.customerProfileSelfie ? (
+                <Image source={{ uri: booking.customerProfileSelfie }} className="w-full h-full" resizeMode="cover" />
+              ) : (
+                <View className="w-full h-full items-center justify-center bg-gray-50">
+                  <Ionicons name="person" size={20} color={Colors.textTertiary} />
+                </View>
+              )}
+            </View>
+            <View>
+              <Text className="text-sm font-inter-bold text-text tracking-tight">Ongoing Journey</Text>
+              <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase">{booking.customerName}</Text>
+            </View>
           </View>
           <View className="bg-primary/10 px-3 py-1.5 rounded-xl border border-primary/10">
             <Text className="text-[9px] font-inter-bold text-primary uppercase tracking-[1.5px]">
@@ -253,7 +265,7 @@ export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, token, refreshUser } = useAuth();
-  const { bookings, fetchBookings, getActiveBooking } = useBookings();
+  const { bookings, fetchBookings, getActiveBooking, checkOperationalAvailability } = useBookings();
   const { unreadCount } = useNotifications();
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
 
@@ -272,6 +284,17 @@ export default function DriverDashboardScreen() {
     }, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Verification Check
+  useEffect(() => {
+    if (user && user.role === 'driver') {
+      if (user.verificationStatus === 'none' || user.verificationStatus === 'rejected') {
+        router.replace('/driver/verify' as any);
+      } else if (user.verificationStatus === 'pending') {
+        router.replace('/driver/pending-approval' as any);
+      }
+    }
+  }, [user?.verificationStatus]);
 
   // Location tracking for Admin Panel
   useEffect(() => {
@@ -349,6 +372,34 @@ export default function DriverDashboardScreen() {
 
   const handleToggleOnline = async () => {
     if (isTogglingOnline) return;
+    
+    // If turning online, check location first
+    if (!user?.isOnline) {
+      setIsTogglingOnline(true);
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Please allow location access to go online.');
+          setIsTogglingOnline(false);
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
+        
+        if (cityCheck.error) {
+          Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
+          setIsTogglingOnline(false);
+          return;
+        }
+      } catch (e) {
+        console.error('Location Check Error:', e);
+        // Fallback or just continue if check fails? 
+        // Better to be safe and allow if it's an error on our side?
+        // User said: "dikhe ki we are not available".
+      }
+    }
+
     setIsTogglingOnline(true);
     try {
       const baseUrl = getApiUrl();
@@ -385,6 +436,7 @@ export default function DriverDashboardScreen() {
     }
   };
 
+
   return (
     <View className="flex-1 bg-[#FDFDFD]">
       <LinearGradient
@@ -398,8 +450,12 @@ export default function DriverDashboardScreen() {
             onPress={() => router.push('/driver/menu' as any)}
             activeOpacity={0.7}
           >
-            <View className="w-12 h-12 rounded-xl bg-white/10 items-center justify-center border border-white/10">
-              <Ionicons name="person" size={24} color={Colors.surface} />
+            <View className="w-12 h-12 rounded-xl bg-white/10 items-center justify-center border border-white/10 overflow-hidden">
+              {user?.profileSelfie ? (
+                <Image source={{ uri: user.profileSelfie }} className="w-full h-full" resizeMode="cover" />
+              ) : (
+                <Ionicons name="person" size={24} color={Colors.surface} />
+              )}
             </View>
             <View className="ml-3.5">
               <Text className="text-[10px] font-inter-medium text-white/50 mb-0.5 uppercase tracking-widest">Active Driver</Text>

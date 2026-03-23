@@ -1,0 +1,646 @@
+﻿diff --git a/app/customer/new-booking.tsx b/app/customer/new-booking.tsx
+index 340bcec..db19d6a 100644
+--- a/app/customer/new-booking.tsx
++++ b/app/customer/new-booking.tsx
+@@ -7,13 +7,13 @@ import {
+   ScrollView,
+   Platform,
+   ActivityIndicator,
+-  Alert,
+   Animated,
+   TextInput,
+   Dimensions,
+   StatusBar,
+   Keyboard,
+ } from 'react-native';
++import InAppAlert, { AlertType, AlertButton } from '@/components/InAppAlert';
+ import { useRouter } from 'expo-router';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+@@ -22,6 +22,7 @@ import RouteMap from '@/components/RouteMap';
+ import { useBookings } from '@/contexts/BookingContext';
+ import Colors from '@/constants/colors';
+ import LocationPickerMap from '@/components/LocationPickerMap';
++import { getApiUrl } from '@/lib/query-client';
+ 
+ import { MOCK_LOCATIONS, BILASPUR_REGION } from '@/lib/locations';
+ 
+@@ -36,11 +37,20 @@ export interface MapLocation {
+   isLoaded?: boolean;
+ }
+ 
+-const VEHICLE_OPTIONS = [
+-  { type: 'auto', label: 'Auto', icon: 'rickshaw' as const, baseFare: 50, perKm: 12, capacity: '200kg', color: '#F59E0B' },
+-  { type: 'tempo', label: 'Tempo', icon: 'truck-outline' as const, baseFare: 150, perKm: 18, capacity: '1000kg', color: '#10B981' },
+-  { type: 'truck', label: 'Truck', icon: 'truck' as const, baseFare: 300, perKm: 25, capacity: '1000kg+', color: '#1B6EF3' },
+-];
++interface VehicleOptionType {
++  type: string;
++  label: string;
++  icon: any;
++  baseFare: number;
++  perKm: number;
++  capacity: string;
++  color: string;
++  allowedCities?: string[];
++  pickupRestriction?: 'city-only' | 'anywhere';
++  dropRestriction?: 'city-only' | 'anywhere';
++}
++
++const DEFAULT_COLOR = '#1B6EF3';
+ 
+ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+   return (
+@@ -99,7 +109,7 @@ function VehicleOption({
+   distance,
+   onPress,
+ }: {
+-  vehicle: typeof VEHICLE_OPTIONS[0];
++  vehicle: VehicleOptionType;
+   isActive: boolean;
+   distance: number;
+   onPress: () => void;
+@@ -130,7 +140,7 @@ function VehicleOption({
+ export default function NewBookingScreen() {
+   const router = useRouter();
+   const insets = useSafeAreaInsets();
+-  const { createBooking } = useBookings();
++  const { createBooking, checkOperationalAvailability } = useBookings();
+ 
+   const [pickup, setPickup] = useState<MapLocation | null>(null);
+   const [delivery, setDelivery] = useState<MapLocation | null>(null);
+@@ -139,18 +149,97 @@ export default function NewBookingScreen() {
+   const [deliverySearch, setDeliverySearch] = useState('');
+   const [searchResults, setSearchResults] = useState<any[]>([]);
+   const [isSearching, setIsSearching] = useState(false);
+-  const [selectedVehicle, setSelectedVehicle] = useState(VEHICLE_OPTIONS[0]);
++  const [selectedVehicle, setSelectedVehicle] = useState<VehicleOptionType | null>(null);
++  const [vehicleOptions, setVehicleOptions] = useState<VehicleOptionType[]>([]);
++  const [fetchingVehicles, setFetchingVehicles] = useState(false);
+   const [loading, setLoading] = useState(false);
+   const [isPickingFromMap, setIsPickingFromMap] = useState(false);
+   const [distance, setDistance] = useState(0);
+   const [calculatingDistance, setCalculatingDistance] = useState(false);
+   const [tempLocation, setTempLocation] = useState<MapLocation | null>(null);
++  const [operationalCities, setOperationalCities] = useState<{ id: string; name: string; lat: number; lng: number; radius: number }[]>([]);
+   const searchId = useRef(0);
+ 
++  // In-app alert state
++  const [alertVisible, setAlertVisible] = useState(false);
++  const [alertType, setAlertType] = useState<AlertType>('info');
++  const [alertTitle, setAlertTitle] = useState('');
++  const [alertMessage, setAlertMessage] = useState('');
++  const [alertButtons, setAlertButtons] = useState<AlertButton[]>([]);
++
++  const showAlert = (
++    type: AlertType,
++    title: string,
++    message?: string,
++    buttons?: AlertButton[]
++  ) => {
++    setAlertType(type);
++    setAlertTitle(title);
++    setAlertMessage(message || '');
++    setAlertButtons(buttons || [{ text: 'OK', style: 'default', onPress: () => setAlertVisible(false) }]);
++    setAlertVisible(true);
++  };
++
+   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
+   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
+   const bothSelected = pickup !== null && delivery !== null;
+ 
++  useEffect(() => {
++    fetchVehicles();
++    fetchOperationalCities();
++  }, []);
++
++  const fetchOperationalCities = async () => {
++    try {
++      const baseUrl = getApiUrl();
++      const res = await fetch(`${baseUrl}/api/cities`);
++      const data = await res.json();
++      // data is an array of { id, name, lat, lng, radius, isActive }
++      if (Array.isArray(data)) {
++        setOperationalCities(data.filter((c: any) => c.isActive));
++      }
++    } catch (e) {
++      console.error('[CITIES] Failed to fetch operational cities:', e);
++    }
++  };
++
++  const fetchVehicles = async () => {
++    setFetchingVehicles(true);
++    try {
++      const baseUrl = getApiUrl();
++      const res = await fetch(`${baseUrl}/api/vehicles`);
++      const data = await res.json();
++      if (data.vehicles && data.vehicles.length > 0) {
++        const options = data.vehicles.map((v: any, index: number) => ({
++          type: v.type,
++          label: v.name,
++          icon: v.icon || (v.type?.toLowerCase().includes('auto') ? 'rickshaw' : 'truck'),
++          baseFare: v.baseFare,
++          perKm: v.perKmRate || v.perKmCharge || 0,
++          capacity: v.capacity,
++          color: index === 0 ? '#F59E0B' : index === 1 ? '#10B981' : '#1B6EF3',
++          allowedCities: v.allowedCities,
++          pickupRestriction: v.pickupRestriction,
++          dropRestriction: v.dropRestriction
++        }));
++        setVehicleOptions(options);
++        setSelectedVehicle(options[0]);
++      }
++    } catch (e) {
++      console.error('Failed to fetch vehicles:', e);
++      // Fallback
++      const fallback = [
++        { type: 'auto', label: 'Auto', icon: 'rickshaw' as const, baseFare: 50, perKm: 12, capacity: '200kg', color: '#F59E0B' },
++        { type: 'tempo', label: 'Tempo', icon: 'truck-outline' as const, baseFare: 150, perKm: 18, capacity: '1000kg', color: '#10B981' },
++        { type: 'truck', label: 'Truck', icon: 'truck' as const, baseFare: 300, perKm: 25, capacity: '1000kg+', color: '#1B6EF3' },
++      ];
++      setVehicleOptions(fallback);
++      setSelectedVehicle(fallback[0]);
++    } finally {
++      setFetchingVehicles(false);
++    }
++  };
++
+   useEffect(() => {
+     if (pickup && delivery && GOOGLE_MAPS_API_KEY) {
+       const getDistance = async () => {
+@@ -245,12 +334,53 @@ export default function NewBookingScreen() {
+ 
+   const handleConfirmBooking = async () => {
+     if (!pickup || !delivery) return;
++
++    // Proactive check for operational city
+     setLoading(true);
++    const pickupCity = await checkOperationalAvailability(pickup.lat, pickup.lng) as any;
++
++    if (pickupCity.error || pickupCity.message) {
++      setLoading(false);
++      showAlert('warning', 'Service Unavailable', `We don't provide service from your current pickup area yet.`);
++      return;
++    }
++    // Vehicle specific checks
++    if (selectedVehicle) {
++      const { allowedCities, pickupRestriction, dropRestriction } = selectedVehicle;
++
++      // 1. Check if pickup city is allowed for this vehicle
++      if (allowedCities && allowedCities.length > 0) {
++        const cityId = pickupCity.id || pickupCity._id;
++        const cityName = pickupCity.name || pickupCity.label || 'this area';
++
++        if (!allowedCities.includes(cityId)) {
++          setLoading(false);
++          showAlert('warning', 'Vehicle Restricted', `This vehicle type is not available for "${cityName}". Please select a different vehicle.`);
++          return;
++        }
++      }
++      // 2. Check pickup restriction (redundant if city restricted but good for 'anywhere')
++      // If pickupRestriction is 'city-only' and pickupCity is null, we already caught by pickupCity.error
++      // 3. Check drop restriction
++      if (dropRestriction === 'city-only') {
++        const dropCity = await checkOperationalAvailability(delivery.lat, delivery.lng) as any;
++        const pickupId = pickupCity.id || pickupCity._id;
++        const dropId = dropCity.id || dropCity._id;
++
++        if (dropCity.error || dropCity.message || pickupId !== dropId) {
++          setLoading(false);
++          const cityName = pickupCity.name || 'this city';
++          showAlert('warning', 'Restricted Route', `For ${selectedVehicle.label}, both pickup and drop must be within ${cityName}.`);
++          return;
++        }
++      }
++    }
++
+     const result = await createBooking({
+       pickup,
+       delivery,
+-      vehicleType: selectedVehicle.type,
+-      totalPrice: selectedVehicle.baseFare + Math.round(distance * selectedVehicle.perKm),
++      vehicleType: selectedVehicle?.type || 'auto',
++      totalPrice: (selectedVehicle?.baseFare || 0) + Math.round(distance * (selectedVehicle?.perKm || 0)),
+       distance,
+     });
+     setLoading(false);
+@@ -260,7 +390,7 @@ export default function NewBookingScreen() {
+       router.replace(`/customer/track-ride?bookingId=${bookingId}` as any);
+     } else {
+       console.error('Booking Creation Error:', result.error);
+-      Alert.alert('Booking Error', result.error || 'Something went wrong. Please check your network and try again.');
++      showAlert('error', 'Booking Failed', result.error || 'Something went wrong. Please check your network and try again.');
+     }
+   };
+ 
+@@ -283,21 +413,35 @@ export default function NewBookingScreen() {
+                   setActiveField('delivery');
+                   setIsPickingFromMap(true);
+                 }}
+-                className="bg-white/95 px-5 py-3 rounded-full shadow-2xl border border-gray-100 flex-row items-center flex-1"
++                style={{
++                  backgroundColor: 'rgba(255,255,255,0.97)',
++                  paddingHorizontal: 18,
++                  paddingVertical: 12,
++                  borderRadius: 50,
++                  flexDirection: 'row',
++                  alignItems: 'center',
++                  shadowColor: '#000',
++                  shadowOffset: { width: 0, height: 4 },
++                  shadowOpacity: 0.12,
++                  shadowRadius: 12,
++                  elevation: 8,
++                  borderWidth: 1,
++                  borderColor: 'rgba(0,0,0,0.06)',
++                }}
+                 activeOpacity={0.9}
+               >
+-                <View className="w-2.5 h-2.5 rounded-full bg-danger mr-3" />
+-                <Text className="text-[14px] font-inter-bold text-text flex-1 mr-2" numberOfLines={1}>
++                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444', marginRight: 12 }} />
++                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A1D26', flex: 1, marginRight: 8 }} numberOfLines={1}>
+                   {delivery.name}
+                 </Text>
+-                <View className="w-8 h-8 items-center justify-center bg-gray-50 rounded-full border border-gray-100">
++                <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' }}>
+                   <Ionicons name="pencil-sharp" size={14} color={Colors.primary} />
+                 </View>
+               </TouchableOpacity>
+             </View>
+           </View>
+         ) : (
+-          <View className="flex-1">
++          <View style={{ flex: 1 }}>
+             <LocationPickerMap
+               activeField={activeField}
+               onLocationSelect={handleLocationSelectFromMap}
+@@ -305,26 +449,50 @@ export default function NewBookingScreen() {
+               initialLocation={activeField === 'pickup' ? pickup : delivery}
+             />
+             {activeField && (
+-              <View className="absolute bottom-8 left-0 right-0 items-center px-6">
+-                <View className="bg-white p-4 rounded-[24px] mb-5 shadow-2xl border border-primary/10 w-[90%]">
+-                  <View className="flex-row items-center mb-2">
+-                    <View className={`w-2 h-2 rounded-full mr-2 ${activeField === 'pickup' ? 'bg-success' : 'bg-danger'}`} />
+-                    <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[2px]">Confirm {activeField} Location</Text>
++              <View style={{ position: 'absolute', bottom: 32, left: 0, right: 0, alignItems: 'center', paddingHorizontal: 24 }}>
++                <View style={{
++                  backgroundColor: '#fff',
++                  padding: 16,
++                  borderRadius: 24,
++                  marginBottom: 16,
++                  width: '90%',
++                  shadowColor: '#000',
++                  shadowOffset: { width: 0, height: 8 },
++                  shadowOpacity: 0.12,
++                  shadowRadius: 20,
++                  elevation: 10,
++                  borderWidth: 1,
++                  borderColor: 'rgba(27,110,243,0.08)',
++                }}>
++                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
++                    <View style={{ width: 8, height: 8, borderRadius: 4, marginRight: 8, backgroundColor: activeField === 'pickup' ? '#10B981' : '#EF4444' }} />
++                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 2 }}>Confirm {activeField} Location</Text>
+                   </View>
+-                  <Text className="text-[13px] font-inter-semibold text-text leading-5" numberOfLines={2}>
++                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#1A1D26', lineHeight: 20 }} numberOfLines={2}>
+                     {tempLocation?.isLoaded === false ? 'Locating...' : (tempLocation?.area || 'Drag map to select exact point')}
+                   </Text>
+                 </View>
+                 <TouchableOpacity
+-                  className={`w-[90%] py-4 rounded-2xl shadow-2xl shadow-primary/30 flex-row items-center justify-center ${(!tempLocation || tempLocation.isLoaded === false) ? 'bg-gray-400' : 'bg-primary'}`}
++                  style={{
++                    width: '90%',
++                    paddingVertical: 16,
++                    borderRadius: 18,
++                    flexDirection: 'row',
++                    alignItems: 'center',
++                    justifyContent: 'center',
++                    backgroundColor: (!tempLocation || tempLocation.isLoaded === false) ? '#9CA3AF' : Colors.primary,
++                    shadowColor: Colors.primary,
++                    shadowOffset: { width: 0, height: 6 },
++                    shadowOpacity: 0.3,
++                    shadowRadius: 12,
++                    elevation: 8,
++                  }}
+                   disabled={!tempLocation || tempLocation.isLoaded === false}
+                   onPress={() => {
+                     if (tempLocation && tempLocation.isLoaded !== false && tempLocation.lat && tempLocation.lng) {
+                       const finalLoc = { ...tempLocation };
+                       delete finalLoc.isLoaded;
+-
+                       console.log(`[MAP-PICK] Confirming ${activeField}: ${finalLoc.name}`);
+-
+                       if (activeField === 'pickup') {
+                         setPickup(finalLoc);
+                         setPickupSearch(finalLoc.name);
+@@ -332,18 +500,17 @@ export default function NewBookingScreen() {
+                         setDelivery(finalLoc);
+                         setDeliverySearch(finalLoc.name);
+                       }
+-
+                       setActiveField(null);
+                       setIsPickingFromMap(false);
+                       setTempLocation(null);
+                       Keyboard.dismiss();
+                     } else {
+-                      Alert.alert('Incomplete Location', 'Please wait for the address to load or move the map slightly.');
++                      showAlert('info', 'Incomplete Location', 'Please wait for the address to load or move the map slightly.');
+                     }
+                   }}
+                 >
+                   <Ionicons name="checkmark-circle" size={20} color="white" style={{ marginRight: 8 }} />
+-                  <Text className="text-white font-inter-bold uppercase tracking-[2px] text-sm">Confirm Location</Text>
++                  <Text style={{ color: '#fff', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 2, fontSize: 13 }}>Confirm Location</Text>
+                 </TouchableOpacity>
+               </View>
+             )}
+@@ -351,112 +518,96 @@ export default function NewBookingScreen() {
+         )}
+       </View>
+ 
+-      <View className="z-10 bg-white/95 shadow-lg rounded-b-[32px]" style={{ paddingTop: topInset }}>
+-        <View className="flex-row items-center px-5 py-3">
+-          <TouchableOpacity onPress={() => router.back()} className="w-9 h-9 items-center justify-center bg-gray-50 rounded-xl border border-gray-100">
++      {/* ΓöÇΓöÇ Sticky floating header overlay (back btn + location inputs) ΓöÇΓöÇ */}
++      <View
++        style={{
++          position: 'absolute',
++          top: 0,
++          left: 0,
++          right: 0,
++          zIndex: 10,
++          paddingTop: topInset,
++          backgroundColor: 'rgba(255,255,255,0.96)',
++          borderBottomLeftRadius: 28,
++          borderBottomRightRadius: 28,
++          shadowColor: '#000',
++          shadowOffset: { width: 0, height: 6 },
++          shadowOpacity: 0.1,
++          shadowRadius: 16,
++          elevation: 12,
++        }}
++      >
++        {/* Header row */}
++        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 }}>
++          <TouchableOpacity
++            onPress={() => router.back()}
++            style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' }}
++          >
+             <Ionicons name="chevron-back" size={20} color={Colors.text} />
+           </TouchableOpacity>
+-          <Text className="flex-1 text-center text-base font-inter-bold text-text">
++          <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: Colors.text }}>
+             {bothSelected ? 'Confirm Trip' : 'Select Locations'}
+           </Text>
+-          <View className="w-9" />
++          <View style={{ width: 36 }} />
+         </View>
+ 
+-        <View className="px-5 pb-4">
+-          <View className="flex-row items-center bg-[#F9FAFB] rounded-2xl p-4 border border-gray-100">
+-            <View className="items-center mr-4">
+-              <View className="w-2.5 h-2.5 rounded-full bg-success" />
+-              <View className="w-px h-6 bg-gray-200 my-1 border-dashed border-l border-gray-300" />
+-              <View className="w-2.5 h-2.5 rounded-full bg-danger" />
++        {/* Location input card */}
++        <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
++          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#F0F2F5' }}>
++            <View style={{ alignItems: 'center', marginRight: 14 }}>
++              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#10B981' }} />
++              <View style={{ width: 1, height: 22, backgroundColor: '#D1D5DB', marginVertical: 4 }} />
++              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444' }} />
+             </View>
+-            <View className="flex-1">
++            <View style={{ flex: 1 }}>
+               <TouchableOpacity
+-                className="flex-row items-center h-12 border-b border-gray-100 mb-0.5"
+-                onPress={() => {
+-                  setActiveField('pickup');
+-                  setIsPickingFromMap(false);
+-                }}
++                style={{ flexDirection: 'row', alignItems: 'center', height: 44, borderBottomWidth: 1, borderBottomColor: '#F0F2F5', marginBottom: 2 }}
++                onPress={() => { setActiveField('pickup'); setIsPickingFromMap(false); }}
+               >
+                 {activeField === 'pickup' ? (
+                   <TextInput
+-                    className="flex-1 text-[15px] font-inter-semibold text-text"
+-                    style={{ paddingVertical: 0 }}
++                    style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#1A1D26', paddingVertical: 0 }}
+                     placeholder="Enter pickup point"
+                     placeholderTextColor="#9CA3AF"
+                     value={pickupSearch}
+                     onChangeText={setPickupSearch}
+-                    onFocus={() => {
+-                      setSearchResults([]);
+-                      if (pickup) setPickupSearch('');
+-                    }}
++                    onFocus={() => { setSearchResults([]); if (pickup) setPickupSearch(''); }}
+                     autoFocus
+                   />
+                 ) : (
+-                  <TouchableOpacity
+-                    className="flex-1 flex-row items-center"
+-                    onPress={() => {
+-                      setActiveField('pickup');
+-                      setIsPickingFromMap(false);
+-                    }}
+-                  >
+-                    <Text className={`flex-1 text-[15px] font-inter-semibold ${pickup ? 'text-text' : 'text-text-tertiary'}`} numberOfLines={1}>
++                  <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => { setActiveField('pickup'); setIsPickingFromMap(false); }}>
++                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: pickup ? '#1A1D26' : '#9CA3AF' }} numberOfLines={1}>
+                       {pickup ? pickup.name : 'Choose Pickup'}
+                     </Text>
+                     {pickup && (
+-                      <TouchableOpacity
+-                        onPress={() => {
+-                          setActiveField('pickup');
+-                          setIsPickingFromMap(true);
+-                        }}
+-                        className="p-1"
+-                      >
++                      <TouchableOpacity onPress={() => { setActiveField('pickup'); setIsPickingFromMap(true); }} style={{ padding: 4 }}>
+                         <Ionicons name="pencil-sharp" size={14} color={Colors.primary} />
+                       </TouchableOpacity>
+                     )}
+                   </TouchableOpacity>
+                 )}
+               </TouchableOpacity>
+-
+               <TouchableOpacity
+-                className="flex-row items-center h-12"
+-                onPress={() => {
+-                  setActiveField('delivery');
+-                  setIsPickingFromMap(false);
+-                }}
++                style={{ flexDirection: 'row', alignItems: 'center', height: 44 }}
++                onPress={() => { setActiveField('delivery'); setIsPickingFromMap(false); }}
+               >
+                 {activeField === 'delivery' ? (
+                   <TextInput
+-                    className="flex-1 text-[15px] font-inter-semibold text-text"
+-                    style={{ paddingVertical: 0 }}
++                    style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#1A1D26', paddingVertical: 0 }}
+                     placeholder="Enter destination"
+                     placeholderTextColor="#9CA3AF"
+                     value={deliverySearch}
+                     onChangeText={setDeliverySearch}
+-                    onFocus={() => {
+-                      setSearchResults([]);
+-                      if (delivery) setDeliverySearch('');
+-                    }}
++                    onFocus={() => { setSearchResults([]); if (delivery) setDeliverySearch(''); }}
+                     autoFocus
+                   />
+                 ) : (
+-                  <TouchableOpacity
+-                    className="flex-1 flex-row items-center"
+-                    onPress={() => {
+-                      setActiveField('delivery');
+-                      setIsPickingFromMap(false);
+-                    }}
+-                  >
+-                    <Text className={`flex-1 text-[15px] font-inter-semibold ${delivery ? 'text-text' : 'text-text-tertiary'}`} numberOfLines={1}>
++                  <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => { setActiveField('delivery'); setIsPickingFromMap(false); }}>
++                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: delivery ? '#1A1D26' : '#9CA3AF' }} numberOfLines={1}>
+                       {delivery ? delivery.name : 'Choose Destination'}
+                     </Text>
+                     {delivery && (
+-                      <TouchableOpacity
+-                        onPress={() => {
+-                          setActiveField('delivery');
+-                          setIsPickingFromMap(true);
+-                        }}
+-                        className="p-1"
+-                      >
++                      <TouchableOpacity onPress={() => { setActiveField('delivery'); setIsPickingFromMap(true); }} style={{ padding: 4 }}>
+                         <Ionicons name="pencil-sharp" size={14} color={Colors.primary} />
+                       </TouchableOpacity>
+                     )}
+@@ -465,25 +616,20 @@ export default function NewBookingScreen() {
+               </TouchableOpacity>
+             </View>
+           </View>
+-
+-          {/* Select on Map Button - Rapido Style */}
+           {activeField && !isPickingFromMap && (
+             <TouchableOpacity
+-              className="flex-row items-center bg-white self-start mt-3 px-5 py-2.5 rounded-full border border-gray-200 shadow-sm"
+-              onPress={() => {
+-                setIsPickingFromMap(true);
+-                Keyboard.dismiss();
+-              }}
++              style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 50, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB' }}
++              onPress={() => { setIsPickingFromMap(true); Keyboard.dismiss(); }}
+             >
+-              <Ionicons name="location-outline" size={18} color={Colors.text} style={{ marginRight: 8 }} />
+-              <Text className="text-[13px] font-inter-semibold text-text">Select on map</Text>
++              <Ionicons name="location-outline" size={16} color={Colors.text} style={{ marginRight: 6 }} />
++              <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.text }}>Select on map</Text>
+             </TouchableOpacity>
+           )}
+         </View>
+       </View>
+ 
+       {activeField && !isPickingFromMap && (
+-        <View className="absolute top-[260px] left-0 right-0 bottom-0 bg-white z-20 rounded-t-3xl shadow-xl">
++        <View style={{ position: 'absolute', top: 220, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 20, borderTopLeftRadius: 28, borderTopRightRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 16 }}>
+           <View className="px-5 pt-4 pb-2">
+             <View className="flex-row items-center mb-4 px-1">
+               <View className="h-[1px] flex-1 bg-gray-100" />
+@@ -524,12 +670,12 @@ export default function NewBookingScreen() {
+                         const { lat, lng } = result.result.geometry.location;
+                         finalLoc = { ...loc, lat, lng };
+                       } else {
+-                        Alert.alert('Location Error', 'Could not get coordinates for this location. Please try another or use map.');
++                        showAlert('error', 'Location Error', 'Could not get coordinates for this location. Please try another or use the map.');
+                         return;
+                       }
+                     } catch (e) {
+                       console.error('Place Details Error:', e);
+-                      Alert.alert('Search Error', 'Failed to fetch location details. Please use the map.');
++                      showAlert('error', 'Search Error', 'Failed to fetch location details. Please use the map.');
+                       return;
+                     } finally {
+                       setIsSearching(false);
+@@ -537,10 +683,27 @@ export default function NewBookingScreen() {
+                   }
+ 
+                   if (!finalLoc.lat || !finalLoc.lng) {
+-                    Alert.alert('Invalid Location', 'This location does not have coordinates. Please select from map.');
++                    showAlert('error', 'Invalid Location', 'This location does not have coordinates. Please select from the map.');
+                     return;
+                   }
+ 
++                  // ΓöÇΓöÇ Check if location falls within any operational city's radius ΓöÇΓöÇ
++                  if (operationalCities.length > 0) {
++                    const inCity = operationalCities.some(city => {
++                      const dist = calculateDistance(city.lat, city.lng, finalLoc.lat, finalLoc.lng);
++                      return dist <= city.radius;
++                    });
++                    if (!inCity) {
++                      const cityNames = operationalCities.map(c => c.name).join(', ');
++                      showAlert(
++                        'warning',
++                        'Outside Service Area',
++                        `"${finalLoc.name}" is outside our operational zones. We currently serve: ${cityNames}. Please choose a location within these areas.`
++                      );
++                      return;
++                    }
++                  }
++
+                   if (activeField === 'pickup') { setPickup(finalLoc); setPickupSearch(finalLoc.name); }
+                   else { setDelivery(finalLoc); setDeliverySearch(finalLoc.name); }
+                   setActiveField(null);
+@@ -564,15 +727,26 @@ export default function NewBookingScreen() {
+             </View>
+ 
+             <ScrollView showsVerticalScrollIndicator={false} className="max-h-[280px]">
+-              {VEHICLE_OPTIONS.map(v => (
+-                <VehicleOption
+-                  key={v.type}
+-                  vehicle={v}
+-                  distance={distance}
+-                  isActive={selectedVehicle.type === v.type}
+-                  onPress={() => setSelectedVehicle(v)}
+-                />
+-              ))}
++              {fetchingVehicles ? (
++                <View className="py-10 items-center">
++                  <ActivityIndicator color={Colors.primary} />
++                  <Text className="text-xs font-inter-medium text-text-tertiary mt-2">Loading ride options...</Text>
++                </View>
++              ) : vehicleOptions.length === 0 ? (
++                <View className="py-10 items-center">
++                  <Text className="text-xs font-inter-medium text-text-tertiary">No rides available</Text>
++                </View>
++              ) : (
++                vehicleOptions.map(v => (
++                  <VehicleOption
++                    key={v.type}
++                    vehicle={v}
++                    distance={distance}
++                    isActive={selectedVehicle?.type === v.type}
++                    onPress={() => setSelectedVehicle(v)}
++                  />
++                ))
++              )}
+             </ScrollView>
+ 
+             <TouchableOpacity
+@@ -597,6 +771,15 @@ export default function NewBookingScreen() {
+           </View>
+         </View>
+       )}
++
++      <InAppAlert
++        visible={alertVisible}
++        type={alertType}
++        title={alertTitle}
++        message={alertMessage}
++        buttons={alertButtons}
++        onDismiss={() => setAlertVisible(false)}
++      />
+     </View>
+   );
+ }

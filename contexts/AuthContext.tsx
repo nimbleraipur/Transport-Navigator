@@ -16,6 +16,22 @@ export interface UserData {
   totalTrips?: number;
   totalEarnings?: number;
   location?: { lat: number; lng: number };
+  verificationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  aadharNumber?: string;
+  aadharPhoto?: string;
+  rcPhoto?: string;
+  licensePhoto?: string;
+  profileSelfie?: string;
+  vehiclePhoto?: string;
+  selfieWithVehicle?: string;
+  rejectionReason?: string;
+  bankDetails?: {
+    accountHolderName: string;
+    accountNumber: string;
+    ifscCode: string;
+    upiId: string;
+    qrCode?: string;
+  };
   createdAt?: string;
 }
 
@@ -30,6 +46,7 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserData>) => void;
   refreshUser: () => Promise<void>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,28 +75,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function apiCall(path: string, body: any) {
+  async function apiCall(path: string, body: any, method: string = 'POST') {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
       const baseUrl = getApiUrl();
       const url = new URL(path, baseUrl);
-      // console.log(`[API] ${path} -> ${url.toString()}`);
       const res = await fetch(url.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify(body),
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
       const data = await res.json();
-      // console.log(`[API] ${path} response:`, JSON.stringify(data).substring(0, 200));
-      return data;
+
+      // Auto-logout if unauthorized (deleted account or invalid/expired token)
+      if (res.status === 401) {
+        console.warn('[AUTH] Unauthorized access — forcing logout');
+        await AsyncStorage.removeItem('auth_token');
+        await AsyncStorage.removeItem('auth_user');
+        setToken(null);
+        setUser(null);
+        if (data.code === 'ACCOUNT_DELETED') {
+          return { success: false, error: 'Your account has been removed. Please contact support.' };
+        }
+        return { success: false, error: 'Session expired. Please log in again.' };
+      }
+
+      return { success: res.ok, ...data };
     } catch (e: any) {
       clearTimeout(timeoutId);
       console.error(`[API] ${path} error:`, e.name === 'AbortError' ? 'Timeout' : e.message);
-      return { success: false, error: e.name === 'AbortError' ? 'Connection timeout. Is the server running?' : 'Connection failed. Please check your internet and try again.' };
+      return {
+        success: false,
+        error: e.name === 'AbortError'
+          ? 'Connection timeout. Is the server running?'
+          : 'Connection failed. Please check your internet and try again.'
+      };
     }
   }
 
@@ -120,6 +157,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function deleteAccount() {
+    try {
+      const baseUrl = getApiUrl();
+      const url = new URL('/api/users/me', baseUrl);
+      const res = await fetch(url.toString(), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Clear session immediately after successful deletion
+        await AsyncStorage.removeItem('auth_token');
+        await AsyncStorage.removeItem('auth_user');
+        setToken(null);
+        setUser(null);
+        return { success: true };
+      }
+      return { success: false, error: data.error || 'Failed to delete account.' };
+    } catch (e: any) {
+      console.error('[DELETE-ACCOUNT]', e.message);
+      return { success: false, error: 'Connection failed. Please try again.' };
+    }
+  }
+
   function updateUser(updates: Partial<UserData>) {
     if (!user) return;
     const updated = { ...user, ...updates };
@@ -133,6 +194,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const baseUrl = getApiUrl();
       const url = new URL('/api/users/me', baseUrl);
       const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+
+      // Auto-logout if admin deleted this account
+      if (res.status === 401) {
+        const data = await res.json().catch(() => ({}));
+        if (data.code === 'ACCOUNT_DELETED' || res.status === 401) {
+          console.warn('[AUTH] Account deleted — forcing logout from refreshUser');
+          await AsyncStorage.removeItem('auth_token');
+          await AsyncStorage.removeItem('auth_user');
+          setToken(null);
+          setUser(null);
+          return;
+        }
+      }
+
       const data = await res.json();
       if (data.user) {
         setUser(data.user);
@@ -145,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     user, token, loading, isAuthenticated: !!user && !!token,
-    sendOtp, verifyOtp, register, logout, updateUser, refreshUser,
+    sendOtp, verifyOtp, register, logout, updateUser, refreshUser, deleteAccount,
   }), [user, token, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

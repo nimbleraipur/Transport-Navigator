@@ -11,6 +11,8 @@ export interface BookingData {
   driverName?: string;
   driverPhone?: string;
   driverVehicleNumber?: string;
+  driverProfileSelfie?: string;
+  customerProfileSelfie?: string;
   pickup: { name: string; area: string; lat: number; lng: number };
   delivery: { name: string; area: string; lat: number; lng: number };
   vehicleType: string;
@@ -29,12 +31,32 @@ export interface BookingData {
   acceptedAt?: string;
   startedAt?: string;
   completedAt?: string;
+  paymentStatus?: 'pending' | 'confirmed';
+  paymentConfirmedAt?: string;
+  driverBankDetails?: {
+    accountHolderName: string;
+    accountNumber: string;
+    ifscCode: string;
+    upiId: string;
+    qrCode?: string;
+  };
+}
+
+export interface VehicleOption {
+  type: string;
+  name: string;
+  baseFare: number;
+  perKmCharge: number;
+  capacity: string;
+  icon: string;
 }
 
 interface BookingContextValue {
   bookings: BookingData[];
+  vehicles: VehicleOption[];
   loading: boolean;
   fetchBookings: () => Promise<void>;
+  fetchVehicles: () => Promise<void>;
   fetchPendingBookings: () => Promise<BookingData[]>;
   createBooking: (data: { pickup: any; delivery: any; vehicleType: string; totalPrice: number; distance: number; paymentMethod?: string }) => Promise<{ success: boolean; booking?: BookingData; error?: string }>;
   acceptBooking: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
@@ -42,8 +64,10 @@ interface BookingContextValue {
   completeTrip: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
   cancelBooking: (bookingId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   rateBooking: (bookingId: string, rating: number, comment?: string) => Promise<{ success: boolean; error?: string }>;
+  confirmPayment: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
   getBookingById: (id: string) => BookingData | undefined;
   getActiveBooking: () => BookingData | undefined;
+  checkOperationalAvailability: (lat: number, lng: number) => Promise<{ name?: string, error?: string }>;
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null);
@@ -51,6 +75,7 @@ const BookingContext = createContext<BookingContextValue | null>(null);
 export function BookingProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth();
   const [bookings, setBookings] = useState<BookingData[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [loading, setLoading] = useState(false);
 
   const apiCall = useCallback(async (path: string, method: string = 'GET', body?: any) => {
@@ -141,17 +166,38 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return { success: false, error: data.error };
   }, [apiCall]);
 
+  const confirmPayment = useCallback(async (bookingId: string) => {
+    const data = await apiCall(`/api/bookings/${bookingId}/confirm-payment`, 'PUT');
+    if (data.booking) {
+      setBookings(prev => prev.map(b => b.id === bookingId ? data.booking : b));
+      return { success: true };
+    }
+    return { success: false, error: data.error };
+  }, [apiCall]);
+
   const getBookingById = useCallback((id: string) => bookings.find(b => b.id === id), [bookings]);
 
   const getActiveBooking = useCallback(() =>
     bookings.find(b => ['pending', 'accepted', 'in_progress'].includes(b.status)),
     [bookings]);
 
+  const checkOperationalAvailability = useCallback(async (lat: number, lng: number) => {
+    const data = await apiCall(`/api/cities/check?lat=${lat}&lng=${lng}`);
+    return data;
+  }, [apiCall]);
+
+  const fetchVehicles = useCallback(async () => {
+    const data = await apiCall('/api/vehicles');
+    if (data.vehicles) {
+      setVehicles(data.vehicles);
+    }
+  }, [apiCall]);
+
   const value = useMemo(() => ({
-    bookings, loading, fetchBookings, fetchPendingBookings, createBooking,
-    acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking,
-    getBookingById, getActiveBooking,
-  }), [bookings, loading, fetchBookings, fetchPendingBookings, createBooking, acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, getBookingById, getActiveBooking]);
+    bookings, vehicles, loading, fetchBookings, fetchVehicles, fetchPendingBookings, createBooking,
+    acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, confirmPayment,
+    getBookingById, getActiveBooking, checkOperationalAvailability,
+  }), [bookings, vehicles, loading, fetchBookings, fetchVehicles, fetchPendingBookings, createBooking, acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, confirmPayment, getBookingById, getActiveBooking, checkOperationalAvailability]);
 
   return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>;
 }

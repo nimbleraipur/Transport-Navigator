@@ -1,6 +1,24 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
+
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+  // Configure how notifications are handled when the app is foregrounded
+  Notifications?.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch (error) {
+  console.warn('Expo Notifications module failed to load:', error);
+}
 
 export interface NotificationItem {
   id: string;
@@ -29,8 +47,39 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
+    registerForPushNotificationsAsync();
     loadNotifications();
   }, [user?.id]);
+
+  async function registerForPushNotificationsAsync() {
+    if (Platform.OS === 'web' || !Notifications) return;
+
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.warn('Failed to get push token for push notification!');
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
+    } catch (e) {
+      console.warn('Notification permission error', e);
+    }
+  }
 
   async function loadNotifications() {
     try {
@@ -51,16 +100,30 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         setNotifications(defaults);
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async function persist(items: NotificationItem[]) {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch (e) {}
+    } catch (e) { }
   }
 
-  const addNotification = useCallback((title: string, message: string, type: NotificationItem['type']) => {
+  const addNotification = useCallback(async (title: string, message: string, type: NotificationItem['type']) => {
+    // Show local system notification
+    if (Platform.OS !== 'web' && Notifications) {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: title,
+            body: message,
+            data: { type },
+          },
+          trigger: null, // show immediately
+        });
+      } catch (e) {}
+    }
+
     setNotifications(prev => {
       const item: NotificationItem = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 5),

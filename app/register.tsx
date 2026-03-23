@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, ActivityIndicator, Animated, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
+import { getApiUrl } from '@/lib/query-client';
 
 function AnimatedInput({ onFocus, onBlur, label, ...props }: any) {
   const [isFocused, setIsFocused] = useState(false);
@@ -69,19 +70,57 @@ function VehicleCard({ vehicle, isActive, onPress, index }: { vehicle: { type: s
 export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const isSmallScreen = SCREEN_WIDTH < 380;
   const params = useLocalSearchParams<{ phone: string; role: string }>();
-  const { register } = useAuth();
+  const { register, logout } = useAuth();
   const [name, setName] = useState('');
   const [vehicleType, setVehicleType] = useState('auto');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
   const [loading, setLoading] = useState(false);
+  const [availableVehicles, setAvailableVehicles] = useState<{type: string, label: string, icon: any}[]>([]);
+  const [fetchingVehicles, setFetchingVehicles] = useState(false);
   const isDriver = params.role === 'driver';
 
   const headerSlide = useRef(new Animated.Value(-20)).current;
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const formSlide = useRef(new Animated.Value(20)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isDriver) {
+      fetchVehicles();
+    }
+  }, [isDriver]);
+
+  const fetchVehicles = async () => {
+    setFetchingVehicles(true);
+    try {
+      const baseUrl = getApiUrl();
+      const res = await fetch(`${baseUrl}/api/vehicles`);
+      const data = await res.json();
+      if (data.vehicles && data.vehicles.length > 0) {
+        const options = data.vehicles.map((v: any, index: number) => ({
+          type: v.type,
+          label: v.name,
+          icon: v.icon || (v.type?.toLowerCase().includes('auto') ? 'rickshaw' : 'truck'),
+        }));
+        setAvailableVehicles(options);
+        setVehicleType(data.vehicles[0].type);
+      }
+    } catch (e) {
+      console.error('Failed to fetch vehicles:', e);
+      // Fallback
+      setAvailableVehicles([
+        { type: 'auto', label: 'Auto', icon: 'rickshaw' as const },
+        { type: 'tempo', label: 'Tempo', icon: 'van-utility' as const },
+        { type: 'truck', label: 'Truck', icon: 'truck' as const },
+      ]);
+    } finally {
+      setFetchingVehicles(false);
+    }
+  };
 
   useEffect(() => {
     Animated.stagger(150, [
@@ -104,7 +143,7 @@ export default function RegisterScreen() {
       phone: params.phone || '',
       name: name.trim(),
       role: params.role || 'customer',
-      ...(isDriver && { vehicleType, vehicleNumber: vehicleNumber.trim(), licenseNumber: licenseNumber.trim() }),
+      ...(isDriver && { vehicleType, vehicleNumber: vehicleNumber.trim() }),
     });
     setLoading(false);
     if (result.success) {
@@ -115,11 +154,7 @@ export default function RegisterScreen() {
     }
   }
 
-  const vehicles = [
-    { type: 'auto', label: 'Auto', icon: 'rickshaw' as const },
-    { type: 'tempo', label: 'Tempo', icon: 'van-utility' as const },
-    { type: 'truck', label: 'Truck', icon: 'truck' as const },
-  ];
+
 
   return (
     <LinearGradient colors={[Colors.navyDark, Colors.navyMid]} className="flex-1">
@@ -140,7 +175,14 @@ export default function RegisterScreen() {
           style={{ transform: [{ translateY: headerSlide }], opacity: headerOpacity }}
         >
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={async () => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                await logout();
+                router.replace('/');
+              }
+            }}
             className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center mr-4 border border-white/5"
           >
             <Ionicons name="chevron-back" size={20} color={Colors.surface} />
@@ -168,16 +210,21 @@ export default function RegisterScreen() {
           {isDriver && (
             <View>
               <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] mb-3 ml-1">Select Transport</Text>
-              <View className="flex-row mb-6" style={{ marginHorizontal: -4 }}>
-                {vehicles.map((v, i) => (
-                  <VehicleCard
-                    key={v.type}
-                    vehicle={v}
-                    index={i}
-                    isActive={vehicleType === v.type}
-                    onPress={() => setVehicleType(v.type)}
-                  />
-                ))}
+              <View className="flex-row mb-6 flex-wrap" style={{ marginHorizontal: -4 }}>
+                {fetchingVehicles ? (
+                  <ActivityIndicator color={Colors.primary} className="py-4" />
+                ) : (
+                  availableVehicles.map((v, i) => (
+                    <View key={v.type} style={{ width: isSmallScreen ? '33.33%' : '25%' }}>
+                      <VehicleCard
+                        vehicle={v}
+                        index={i}
+                        isActive={vehicleType === v.type}
+                        onPress={() => setVehicleType(v.type)}
+                      />
+                    </View>
+                  ))
+                )}
               </View>
 
               <AnimatedInput
@@ -185,14 +232,6 @@ export default function RegisterScreen() {
                 placeholder="MP09 AB 1234"
                 value={vehicleNumber}
                 onChangeText={setVehicleNumber}
-                autoCapitalize="characters"
-              />
-
-              <AnimatedInput
-                label="License (Optional)"
-                placeholder="MH01 2024 000..."
-                value={licenseNumber}
-                onChangeText={setLicenseNumber}
                 autoCapitalize="characters"
               />
             </View>

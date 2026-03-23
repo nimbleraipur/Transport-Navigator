@@ -1,7 +1,16 @@
-import { Stack } from 'expo-router';
+import { Stack, Redirect } from 'expo-router';
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function DriverLayout() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) return null;
+
+  if (!isAuthenticated) {
+    return <Redirect href="/" />;
+  }
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="dashboard" />
@@ -15,6 +24,8 @@ export default function DriverLayout() {
       <Stack.Screen name="settings" />
       <Stack.Screen name="help" />
       <Stack.Screen name="support" />
+      <Stack.Screen name="verify" />
+      <Stack.Screen name="pending-approval" />
     </Stack>
   );
 }

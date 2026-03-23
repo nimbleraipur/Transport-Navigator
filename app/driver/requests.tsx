@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBookings, BookingData } from '@/contexts/BookingContext';
 import { getApiUrl } from '@/lib/query-client';
 import Colors from '@/constants/colors';
+
+function getTimeAgo(dateString: string) {
+  const diff = Date.now() - new Date(dateString).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes === 1) return '1 min ago';
+  return `${minutes} mins ago`;
+}
 
 function ShimmerButton({ onPress, disabled, isLoading }: { onPress: () => void; disabled: boolean; isLoading: boolean }) {
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -116,14 +125,30 @@ function AnimatedRequestCard({
           className="flex-row items-center px-2.5 py-1.5 bg-primary/10 rounded-lg"
           style={[{ transform: [{ scale: badgeBounce }] }]}
         >
-          <MaterialCommunityIcons name={getVehicleIcon(item.vehicleType) as any} size={18} color={Colors.primary} />
-          <Text className="ml-1.5 text-[10px] font-inter-bold text-primary uppercase tracking-wider">
-            {item.vehicleType}
-          </Text>
+          <View className="w-8 h-8 rounded-full overflow-hidden mr-2.5 border border-primary/20">
+            {item.customerProfileSelfie ? (
+              <Image source={{ uri: item.customerProfileSelfie }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+              <View className="w-full h-full items-center justify-center bg-white/50">
+                <Ionicons name="person" size={14} color={Colors.primary} />
+              </View>
+            )}
+          </View>
+          <View>
+            <Text className="text-[10px] font-inter-bold text-primary uppercase tracking-wider">
+              {item.customerName || 'Customer'}
+            </Text>
+            <View className="flex-row items-center mt-0.5">
+              <MaterialCommunityIcons name={getVehicleIcon(item.vehicleType) as any} size={11} color={Colors.primary} />
+              <Text className="ml-1 text-[8px] font-inter-bold text-primary/60 uppercase">
+                {item.vehicleType}
+              </Text>
+            </View>
+          </View>
         </Animated.View>
         <View className="items-end">
           <Text className="text-xl font-inter-bold text-text">₹{item.totalPrice}</Text>
-          <Text className="text-[9px] font-inter-medium text-text-tertiary uppercase tracking-wider mt-0.5">Estimated Fare</Text>
+          <Text className="text-[9px] font-inter-bold text-success uppercase tracking-wider mt-0.5">{getTimeAgo(item.createdAt)}</Text>
         </View>
       </View>
 
@@ -268,7 +293,7 @@ export default function DriverRequestsScreen() {
     try {
       const result = await acceptBooking(bookingId);
       if (result.success) {
-        router.push({ pathname: '/driver/active-ride' as any, params: { bookingId } });
+        router.push(`/driver/active-ride?bookingId=${bookingId}` as any);
       } else {
         Alert.alert('In Progress', result.error || 'This ride is no longer available');
       }

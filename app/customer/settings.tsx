@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Switch, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { clearAll } = useNotifications();
+  const { deleteAccount } = useAuth();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const webTop = Platform.OS === 'web' ? 67 : 0;
   const topInset = insets.top + webTop;
@@ -23,6 +26,42 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: clearAll },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'Your booking history, profile, and all account data will be permanently erased.',
+              [
+                { text: 'Go Back', style: 'cancel' },
+                {
+                  text: 'Yes, Delete My Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    const result = await deleteAccount();
+                    setDeletingAccount(false);
+                    if (!result.success) {
+                      Alert.alert('Error', result.error || 'Failed to delete account.');
+                    }
+                    // On success, AuthContext clears state → app redirects automatically
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -120,6 +159,25 @@ export default function SettingsScreen() {
             </View>
             <Text className="text-sm font-inter text-text-tertiary">2026.02</Text>
           </View>
+        </View>
+
+        <Text className="text-[11px] font-inter-semibold text-text-tertiary uppercase tracking-wider mb-2.5 ml-1 mt-5">Account</Text>
+        <View className="bg-surface rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+          <TouchableOpacity
+            className="flex-row items-center justify-between py-3.5 px-4"
+            onPress={handleDeleteAccount}
+            activeOpacity={0.7}
+            disabled={deletingAccount}
+          >
+            <View className="flex-row items-center space-x-3">
+              <Ionicons name="person-remove-outline" size={20} color={Colors.danger} />
+              <Text className="text-[15px] font-inter-semibold text-danger">Delete Account</Text>
+            </View>
+            {deletingAccount
+              ? <ActivityIndicator size="small" color={Colors.danger} />
+              : <Ionicons name="chevron-forward" size={18} color={Colors.textTertiary} />
+            }
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>

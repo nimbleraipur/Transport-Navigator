@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Switch, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function DriverSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { clearAll } = useNotifications();
+  const { deleteAccount } = useAuth();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [locationEnabled, setLocationEnabled] = useState(true);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
@@ -23,6 +26,42 @@ export default function DriverSettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: clearAll },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you absolutely sure?',
+              'Your booking history, profile, and all account data will be permanently erased.',
+              [
+                { text: 'Go Back', style: 'cancel' },
+                {
+                  text: 'Yes, Delete My Account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    const result = await deleteAccount();
+                    setDeletingAccount(false);
+                    if (!result.success) {
+                      Alert.alert('Error', result.error || 'Failed to delete account.');
+                    }
+                    // On success, AuthContext clears state → app redirects automatically
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -129,6 +168,27 @@ export default function DriverSettingsScreen() {
             </View>
             <Text className="text-[13px] font-inter-bold text-text-tertiary">1.0.0 (RT-LIVE)</Text>
           </View>
+        </View>
+
+        <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[2px] mb-3 ml-1 mt-6">Account</Text>
+        <View className="bg-white rounded-2xl border border-gray-50 overflow-hidden shadow-sm">
+          <TouchableOpacity
+            className="flex-row items-center justify-between py-4 px-4"
+            onPress={handleDeleteAccount}
+            activeOpacity={0.7}
+            disabled={deletingAccount}
+          >
+            <View className="flex-row items-center">
+              <View className="w-8 h-8 rounded-lg bg-danger/5 items-center justify-center mr-3">
+                <Ionicons name="person-remove-outline" size={16} color={Colors.danger} />
+              </View>
+              <Text className="text-[14px] font-inter-semibold text-danger">Delete Account</Text>
+            </View>
+            {deletingAccount
+              ? <ActivityIndicator size="small" color={Colors.danger} />
+              : <Ionicons name="chevron-forward" size={14} color={Colors.textTertiary} />
+            }
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>

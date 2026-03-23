@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Animated, Dimensions, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Animated, Dimensions, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,13 +95,17 @@ export default function CustomerMenuScreen() {
         </View>
 
         <View className="flex-row items-center px-8">
-          <View className="w-16 h-16 rounded-2xl bg-white/10 items-center justify-center border border-white/10 shadow-2xl text-center">
-            <LinearGradient
-              colors={['#102238', '#1C2B4A']}
-              className="w-full h-full rounded-2xl items-center justify-center"
-            >
-              <Ionicons name="person" size={28} color={Colors.surface} />
-            </LinearGradient>
+          <View className="w-16 h-16 rounded-2xl bg-white/10 items-center justify-center border border-white/10 shadow-2xl overflow-hidden">
+            {user?.profileSelfie ? (
+              <Image source={{ uri: user.profileSelfie }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+              <LinearGradient
+                colors={['#102238', '#1C2B4A']}
+                className="w-full h-full rounded-2xl items-center justify-center"
+              >
+                <Ionicons name="person" size={28} color={Colors.surface} />
+              </LinearGradient>
+            )}
           </View>
           <View className="ml-4 flex-1">
             <Text className="text-xl font-inter-bold text-surface">{user?.name || 'User'}</Text>

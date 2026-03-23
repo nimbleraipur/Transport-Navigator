@@ -78,23 +78,25 @@ const LocationPickerMap = (props: LocationPickerMapProps) => {
                                     `https://maps.googleapis.com/maps/api/geocode/json?latlng=${r.latitude},${r.longitude}&key=${props.googleMapsApiKey}`
                                 );
                                 const data = await res.json();
-                                if (data.status === 'OK' && data.results.length > 0) {
+                                if (data.status === 'OK' && data.results && data.results.length > 0) {
                                     // Filter out results that are just plus codes if possible
-                                    const bestResult = data.results.find((r: any) => !r.types.includes('plus_code')) || data.results[0];
+                                    const bestResult = data.results.find((r: any) => !r.types?.includes('plus_code')) || data.results[0];
 
                                     // Try to find a meaningful name (e.g., point of interest, sublocality)
                                     const poi = data.results.find((r: any) =>
-                                        r.types.includes('point_of_interest') ||
-                                        r.types.includes('establishment') ||
-                                        r.types.includes('sublocality_level_1')
+                                        r.types?.includes('point_of_interest') ||
+                                        r.types?.includes('establishment') ||
+                                        r.types?.includes('sublocality_level_1')
                                     );
 
-                                    name = poi ? poi.address_components[0]?.long_name : (bestResult.address_components[0]?.long_name || 'Selected Point');
-                                    area = bestResult.formatted_address;
+                                    name = poi ? poi.address_components?.[0]?.long_name : (bestResult.address_components?.[0]?.long_name || 'Selected Point');
+                                    area = bestResult.formatted_address || `Lat: ${r.latitude.toFixed(4)}, Lng: ${r.longitude.toFixed(4)}`;
                                 } else {
-                                    if (data.status === 'REQUEST_DENIED' || data.status === 'OVER_QUERY_LIMIT') {
-                                        console.error('Geocoding API Error:', data.error_message || data.status);
-                                        area = `API Error: ${data.status}. Check API Key/Billing.`;
+                                    if (data.status === 'REQUEST_DENIED' || data.status === 'OVER_QUERY_LIMIT' || data.status === 'ZERO_RESULTS') {
+                                        console.error('Geocoding API Status:', data.status);
+                                        if (data.status !== 'ZERO_RESULTS' && data.error_message) {
+                                            console.error('Geocoding Error Detail:', data.error_message);
+                                        }
                                     }
                                 }
                             } catch (e) {

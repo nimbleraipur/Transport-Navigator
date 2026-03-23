@@ -36,19 +36,13 @@ export interface MapLocation {
   isLoaded?: boolean;
 }
 
-// Static types for safety, but data comes from backend
-const VEHICLE_COLORS: { [key: string]: string } = {
-  'auto': '#F59E0B',
-  'tempo': '#10B981',
-  'truck': '#1B6EF3',
-};
+const VEHICLE_OPTIONS = [
+  { type: 'auto', label: 'Auto', icon: 'rickshaw' as const, baseFare: 50, perKm: 12, capacity: '200kg', color: '#F59E0B' },
+  { type: 'tempo', label: 'Tempo', icon: 'truck-outline' as const, baseFare: 150, perKm: 18, capacity: '1000kg', color: '#10B981' },
+  { type: 'truck', label: 'Truck', icon: 'truck' as const, baseFare: 300, perKm: 25, capacity: '1000kg+', color: '#1B6EF3' },
+];
 
-const DEFAULT_COLOR = '#1B6EF3';
-
-function calculateDistance(lat1?: number, lng1?: number, lat2?: number, lng2?: number): number {
-  if (lat1 === undefined || lng1 === undefined || lat2 === undefined || lng2 === undefined) return 0;
-  if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) return 0;
-  
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   return (
     Math.round(
       Math.sqrt(
@@ -105,12 +99,12 @@ function VehicleOption({
   distance,
   onPress,
 }: {
-  vehicle: any;
+  vehicle: typeof VEHICLE_OPTIONS[0];
   isActive: boolean;
   distance: number;
   onPress: () => void;
 }) {
-  const totalPrice = (vehicle.baseFare || 0) + Math.round((distance || 0) * (vehicle.perKmCharge || 0));
+  const totalPrice = vehicle.baseFare + Math.round(distance * vehicle.perKm);
 
   return (
     <TouchableOpacity
@@ -119,15 +113,15 @@ function VehicleOption({
       className={`flex-row items-center p-3.5 rounded-2xl mb-2.5 border transition-all ${isActive ? 'border-primary bg-primary/5' : 'border-gray-50 bg-white'}`}
     >
       <View className={`w-11 h-11 rounded-xl items-center justify-center mr-4 ${isActive ? 'bg-primary/10' : 'bg-gray-100'}`}>
-        <MaterialCommunityIcons name={(vehicle.icon || 'truck') as any} size={24} color={isActive ? Colors.primary : Colors.textSecondary} />
+        <MaterialCommunityIcons name={vehicle.icon} size={24} color={isActive ? Colors.primary : Colors.textSecondary} />
       </View>
       <View className="flex-1">
-        <Text className={`text-sm font-inter-bold ${isActive ? 'text-text' : 'text-text-secondary'} mb-0.5`}>{vehicle.name || vehicle.type}</Text>
+        <Text className={`text-sm font-inter-bold ${isActive ? 'text-text' : 'text-text-secondary'} mb-0.5`}>{vehicle.label}</Text>
         <Text className="text-[10px] font-inter-medium text-text-tertiary">{vehicle.capacity}</Text>
       </View>
       <View className="items-end">
         <Text className="text-base font-inter-bold text-text">₹{totalPrice}</Text>
-        <Text className="text-[9px] font-inter-bold text-primary uppercase mt-0.5 tracking-wider">₹{vehicle.perKmCharge}/km</Text>
+        <Text className="text-[9px] font-inter-bold text-primary uppercase mt-0.5 tracking-wider">₹{vehicle.perKm}/km</Text>
       </View>
     </TouchableOpacity>
   );
@@ -145,33 +139,17 @@ export default function NewBookingScreen() {
   const [deliverySearch, setDeliverySearch] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const { vehicles, fetchVehicles } = useBookings();
-  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState(VEHICLE_OPTIONS[0]);
   const [loading, setLoading] = useState(false);
   const [isPickingFromMap, setIsPickingFromMap] = useState(false);
   const [distance, setDistance] = useState(0);
   const [calculatingDistance, setCalculatingDistance] = useState(false);
   const [tempLocation, setTempLocation] = useState<MapLocation | null>(null);
-  const [showServiceError, setShowServiceError] = useState(false);
-  const [serviceErrorMsg, setServiceErrorMsg] = useState('');
-  const [serviceErrorTitle, setServiceErrorTitle] = useState('Outside Service Area');
   const searchId = useRef(0);
-  const modalScale = useRef(new Animated.Value(0)).current;
-  const modalOpacity = useRef(new Animated.Value(0)).current;
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
   const bothSelected = pickup !== null && delivery !== null;
-
-  useEffect(() => {
-    fetchVehicles();
-  }, []);
-
-  useEffect(() => {
-    if (vehicles.length > 0 && !selectedVehicle) {
-      setSelectedVehicle(vehicles[0]);
-    }
-  }, [vehicles]);
 
   useEffect(() => {
     if (pickup && delivery && GOOGLE_MAPS_API_KEY) {
@@ -182,21 +160,16 @@ export default function NewBookingScreen() {
             `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${pickup.lat},${pickup.lng}&destinations=${delivery.lat},${delivery.lng}&key=${GOOGLE_MAPS_API_KEY}`
           );
           const data = await response.json();
-          if (data.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
-            const distanceObj = data.rows[0].elements[0].distance;
-            if (distanceObj && typeof distanceObj.value === 'number') {
-              const distInKm = distanceObj.value / 1000;
-              setDistance(Math.round(distInKm * 10) / 10);
-            } else {
-              setDistance(calculateDistance(pickup?.lat, pickup?.lng, delivery?.lat, delivery?.lng));
-            }
+          if (data.status === 'OK' && data.rows[0].elements[0].status === 'OK') {
+            const distInKm = data.rows[0].elements[0].distance.value / 1000;
+            setDistance(Math.round(distInKm * 10) / 10);
           } else {
-            console.log('[BOOKING] Distance Matrix Status:', data.status);
-            setDistance(calculateDistance(pickup?.lat, pickup?.lng, delivery?.lat, delivery?.lng));
+            // Fallback to direct distance
+            setDistance(calculateDistance(pickup.lat, pickup.lng, delivery.lat, delivery.lng));
           }
         } catch (e) {
           console.error('Distance Matrix Error:', e);
-          setDistance(calculateDistance(pickup?.lat, pickup?.lng, delivery?.lat, delivery?.lng));
+          setDistance(calculateDistance(pickup.lat, pickup.lng, delivery.lat, delivery.lng));
         } finally {
           setCalculatingDistance(false);
         }
@@ -227,10 +200,10 @@ export default function NewBookingScreen() {
         // Only update if this is still the most recent search
         if (currentSearchId === searchId.current) {
           if (data.status === 'OK') {
-            const results = (data.predictions || []).map((p: any) => ({
+            const results = data.predictions.map((p: any) => ({
               id: p.place_id,
-              name: p.structured_formatting?.main_text || 'Unknown Location',
-              area: p.structured_formatting?.secondary_text || p.description || '',
+              name: p.structured_formatting.main_text,
+              area: p.structured_formatting.secondary_text,
               place_id: p.place_id
             }));
             setSearchResults(results);
@@ -271,33 +244,13 @@ export default function NewBookingScreen() {
   }, [pickupSearch, deliverySearch, activeField]);
 
   const handleConfirmBooking = async () => {
-    if (!pickup || !delivery || !selectedVehicle) {
-      Alert.alert('Selection Required', 'Please select pickup, delivery, and a vehicle type.');
-      return;
-    }
-
-    // Sanitize location objects - ensure all required fields are present
-    const sanitizeLocation = (loc: MapLocation) => ({
-      name: loc.name || 'Unknown Location',
-      area: loc.area || loc.name || '',
-      lat: Number(loc.lat),
-      lng: Number(loc.lng),
-    });
-
-    const sanitizedPickup = sanitizeLocation(pickup);
-    const sanitizedDelivery = sanitizeLocation(delivery);
-
-    if (!sanitizedPickup.lat || !sanitizedPickup.lng || !sanitizedDelivery.lat || !sanitizedDelivery.lng) {
-      Alert.alert('Invalid Location', 'One or more locations have invalid coordinates. Please re-select.');
-      return;
-    }
-
+    if (!pickup || !delivery) return;
     setLoading(true);
     const result = await createBooking({
-      pickup: sanitizedPickup,
-      delivery: sanitizedDelivery,
-      vehicleType: selectedVehicle.type || 'auto',
-      totalPrice: (selectedVehicle.baseFare || 0) + Math.round((distance || 0) * (selectedVehicle.perKmCharge || selectedVehicle.perKm || 0)),
+      pickup,
+      delivery,
+      vehicleType: selectedVehicle.type,
+      totalPrice: selectedVehicle.baseFare + Math.round(distance * selectedVehicle.perKm),
       distance,
     });
     setLoading(false);
@@ -307,29 +260,7 @@ export default function NewBookingScreen() {
       router.replace(`/customer/track-ride?bookingId=${bookingId}` as any);
     } else {
       console.error('Booking Creation Error:', result.error);
-      const isServiceError = result.error && (
-        result.error.includes('service area') || 
-        result.error.includes('Operational Cities') || 
-        result.error.includes('service city') ||
-        result.error.includes('Drop location') ||
-        result.error.includes('Pickup location') ||
-        result.error.includes('km long')
-      );
-
-      if (isServiceError) {
-        setServiceErrorMsg(result.error || '');
-        let title = 'Service Restricted';
-        if (result.error?.includes('Drop')) title = 'Drop Area Restricted';
-        if (result.error?.includes('km long')) title = 'Distance Limit';
-        setServiceErrorTitle(title);
-        setShowServiceError(true);
-        Animated.parallel([
-          Animated.spring(modalScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
-          Animated.timing(modalOpacity, { toValue: 1, duration: 300, useNativeDriver: true })
-        ]).start();
-      } else {
-        Alert.alert('Booking Error', result.error || 'Something went wrong. Please check your network and try again.');
-      }
+      Alert.alert('Booking Error', result.error || 'Something went wrong. Please check your network and try again.');
     }
   };
 
@@ -374,8 +305,8 @@ export default function NewBookingScreen() {
               initialLocation={activeField === 'pickup' ? pickup : delivery}
             />
             {activeField && (
-              <View style={{ position: 'absolute', bottom: bottomInset + 16, left: 0, right: 0, alignItems: 'center', paddingHorizontal: 24 }}>
-                <View className="bg-white p-4 rounded-[24px] mb-4 shadow-2xl border border-primary/10 w-full">
+              <View className="absolute bottom-8 left-0 right-0 items-center px-6">
+                <View className="bg-white p-4 rounded-[24px] mb-5 shadow-2xl border border-primary/10 w-[90%]">
                   <View className="flex-row items-center mb-2">
                     <View className={`w-2 h-2 rounded-full mr-2 ${activeField === 'pickup' ? 'bg-success' : 'bg-danger'}`} />
                     <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[2px]">Confirm {activeField} Location</Text>
@@ -385,8 +316,7 @@ export default function NewBookingScreen() {
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={{ width: '100%' }}
-                  className={`py-4 rounded-2xl shadow-2xl shadow-primary/30 flex-row items-center justify-center ${(!tempLocation || tempLocation.isLoaded === false) ? 'bg-gray-400' : 'bg-primary'}`}
+                  className={`w-[90%] py-4 rounded-2xl shadow-2xl shadow-primary/30 flex-row items-center justify-center ${(!tempLocation || tempLocation.isLoaded === false) ? 'bg-gray-400' : 'bg-primary'}`}
                   disabled={!tempLocation || tempLocation.isLoaded === false}
                   onPress={() => {
                     if (tempLocation && tempLocation.isLoaded !== false && tempLocation.lat && tempLocation.lng) {
@@ -634,12 +564,12 @@ export default function NewBookingScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} className="max-h-[280px]">
-              {(vehicles.length > 0 ? vehicles : []).map((v: any) => (
+              {VEHICLE_OPTIONS.map(v => (
                 <VehicleOption
-                  key={v.id || v.type}
+                  key={v.type}
                   vehicle={v}
                   distance={distance}
-                  isActive={selectedVehicle?.type === v.type}
+                  isActive={selectedVehicle.type === v.type}
                   onPress={() => setSelectedVehicle(v)}
                 />
               ))}
@@ -665,64 +595,6 @@ export default function NewBookingScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
-      )}
-
-      {/* Service Area Error Modal */}
-      {showServiceError && (
-        <View style={StyleSheet.absoluteFill} className="z-50 items-center justify-center p-6">
-          <Animated.View 
-            style={{ opacity: modalOpacity }}
-            className="absolute inset-0 bg-navyDark/80" 
-          />
-          <Animated.View 
-            style={{ 
-              transform: [{ scale: modalScale }],
-              opacity: modalOpacity 
-            }}
-            className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl"
-          >
-            <LinearGradient
-              colors={[Colors.danger, '#DC2626']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="py-10 items-center"
-            >
-              <View className="w-20 h-20 rounded-full bg-white/20 items-center justify-center border border-white/30">
-                <MaterialCommunityIcons name="map-marker-off" size={40} color="white" />
-              </View>
-            </LinearGradient>
-            
-            <View className="p-8 items-center">
-              <Text className="text-xl font-inter-bold text-text text-center mb-3">{serviceErrorTitle}</Text>
-              <Text className="text-[14px] font-inter-medium text-text-secondary text-center leading-5 mb-8">
-                {serviceErrorMsg || "We currently don't offer services in this location. We're expanding rapidly, please check back soon!"}
-              </Text>
-              
-              <TouchableOpacity
-                onPress={() => {
-                  Animated.parallel([
-                    Animated.timing(modalScale, { toValue: 0.8, duration: 200, useNativeDriver: true }),
-                    Animated.timing(modalOpacity, { toValue: 0, duration: 200, useNativeDriver: true })
-                  ]).start(() => {
-                    setShowServiceError(false);
-                  });
-                }}
-                className="w-full h-14 rounded-2xl bg-gray-100 items-center justify-center"
-              >
-                <Text className="text-sm font-inter-bold text-text uppercase tracking-widest">Understood</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                onPress={() => {
-                   router.back();
-                }}
-                className="mt-4"
-              >
-                <Text className="text-[12px] font-inter-bold text-primary uppercase tracking-wider">Change Location</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
         </View>
       )}
     </View>

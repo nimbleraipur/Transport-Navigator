@@ -9,13 +9,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: 'my-load-24', // Must match the project ID on Expo dashboard
   version: '1.0.0',
   orientation: 'portrait',
-  icon: './assets/images/icon.png',
+  icon: IS_DRIVER ? './assets/images/driver-app-icon.png' : './assets/images/icon.png',
   scheme: IS_DRIVER ? 'myload24driver' : 'myload24',
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   splash: {
-    image: './assets/images/splash-icon.png',
-    resizeMode: 'contain',
+    image: './assets/images/splash.gif',
+    resizeMode: 'cover',
     backgroundColor: '#0A1628',
   },
   ios: {
@@ -27,9 +27,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: IS_DRIVER ? 'com.myload24.driver' : 'com.myload24',
+    softwareKeyboardLayoutMode: 'pan',
     adaptiveIcon: {
       backgroundColor: '#0A1628',
-      foregroundImage: './assets/images/icon.png',
+      foregroundImage: IS_DRIVER ? './assets/images/driver-app-icon.png' : './assets/images/icon.png',
     },
     config: {
       googleMaps: {

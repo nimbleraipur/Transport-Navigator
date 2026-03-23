@@ -24,10 +24,10 @@ function StarButton({ index, rating, onPress }: { index: number; rating: number;
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <TouchableOpacity onPress={handlePress} activeOpacity={0.7} className="px-1">
-        <Ionicons name={selected ? 'star' : 'star-outline'} size={48} color={selected ? '#F59E0B' : '#E5E7EB'} />
+        <Ionicons name={selected ? 'star' : 'star-outline'} size={40} color={selected ? '#F59E0B' : '#CBD5E1'} />
         {selected && (
-          <Animated.View className="absolute inset-0 items-center justify-center opacity-20">
-            <Ionicons name="star" size={56} color="#F59E0B" />
+          <Animated.View className="absolute inset-0 items-center justify-center opacity-10">
+            <Ionicons name="star" size={48} color="#F59E0B" />
           </Animated.View>
         )}
       </TouchableOpacity>
@@ -69,68 +69,69 @@ export default function RateRideScreen() {
   }
 
   return (
-    <View className="flex-1 bg-[#FDFDFD]">
+    <View className="flex-1 bg-[#F8FAFC]">
       <LinearGradient
-        colors={[Colors.success, '#065F46']}
-        className="pb-20 rounded-b-[60px] shadow-2xl items-center"
-        style={{ paddingTop: topInset + 32 }}
+        colors={[Colors.primary, '#1E40AF']}
+        className="pb-16 rounded-b-[48px] shadow-lg items-center"
+        style={{ paddingTop: topInset + 16 }}
       >
-        <View className="w-24 h-24 bg-white/20 rounded-[40px] items-center justify-center mb-6 border border-white/20">
-          <Ionicons name="checkmark-done" size={48} color="#FFF" />
+        <View className="w-20 h-20 bg-white/10 rounded-full items-center justify-center mb-4 border border-white/20">
+          <MaterialCommunityIcons name="star-face" size={44} color="#FFF" />
         </View>
-        <Text className="text-2xl font-inter-black text-white uppercase tracking-[4px]">Mission Accomplished</Text>
-        <Text className="text-sm font-inter-medium text-white/60 mt-2">The transportation job has been finalized</Text>
+        <Text className="text-xl font-inter-black text-white uppercase tracking-widest text-center px-4">Rate Your Experience</Text>
+        <Text className="text-xs font-inter-medium text-white/70 mt-1">Help us improve the service</Text>
       </LinearGradient>
 
       <ScrollView
-        className="flex-1 -mt-12"
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: bottomInset + 40 }}
+        className="flex-1 -mt-8"
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: bottomInset + 30 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="bg-white rounded-[40px] p-8 shadow-2xl shadow-black/5 border border-gray-50 mb-8">
-          <View className="items-center mb-8">
-            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[4px] mb-6">Service Quality</Text>
-            <View className="flex-row items-center mb-3">
+        <View className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 mb-6">
+          <View className="items-center mb-6">
+            <Text className="text-[10px] font-inter-bold text-slate-400 uppercase tracking-[2px] mb-4">Driver Service Quality</Text>
+            <View className="flex-row items-center mb-2">
               {[1, 2, 3, 4, 5].map(i => (
                 <StarButton key={i} index={i} rating={rating} onPress={setRating} />
               ))}
             </View>
-            <Text className="text-lg font-inter-bold text-text mt-2">
-              {rating === 0 ? 'How was the service?' : rating <= 2 ? 'Subpar Experience' : rating <= 4 ? 'Great Service' : 'Exceptional Partner'}
+            <Text className="text-base font-inter-bold text-slate-700 mt-2">
+              {rating === 0 ? 'Select Stars' : rating <= 2 ? 'Needs Improvement' : rating <= 4 ? 'Good Experience' : 'Excellent Service'}
             </Text>
           </View>
 
-          <View className="mb-10">
-            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[3px] mb-5">Professional Badges</Text>
-            <View className="flex-row flex-wrap gap-3">
+          <View className="mb-6">
+            <Text className="text-[10px] font-inter-bold text-slate-400 uppercase tracking-[2px] mb-4">What stood out?</Text>
+            <View className="flex-row flex-wrap gap-2">
               {feedbackTags.map(tag => {
                 const isSelected = selectedTags.includes(tag);
                 return (
                   <TouchableOpacity
                     key={tag}
-                    className={`px-5 py-3 rounded-2xl border ${isSelected ? 'bg-primary/5 border-primary' : 'bg-gray-50 border-gray-50'}`}
+                    className={`px-4 py-2 rounded-xl border ${isSelected ? 'bg-primary/5 border-primary' : 'bg-slate-50 border-slate-50'}`}
                     onPress={() => toggleTag(tag)}
                     activeOpacity={0.7}
                   >
-                    <Text className={`text-xs font-inter-bold ${isSelected ? 'text-primary' : 'text-text-secondary'}`}>{tag}</Text>
+                    <Text className={`text-[11px] font-inter-bold ${isSelected ? 'text-primary' : 'text-slate-500'}`}>{tag}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </View>
 
-          <View className="mb-0">
-            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[3px] mb-5">Extended Feedback</Text>
-            <View className="bg-gray-50 rounded-3xl p-5 border border-gray-100 min-h-[120px]">
+          <View className="mb-2">
+            <Text className="text-[10px] font-inter-bold text-slate-400 uppercase tracking-[2px] mb-3">Any suggestions? (Optional)</Text>
+            <View className="bg-slate-50 rounded-2xl p-4 border border-slate-100 min-h-[100px]">
               <TextInput
-                className="text-sm font-inter-bold text-text flex-1"
-                placeholder="Detailed observations about the partner or transit..."
-                placeholderTextColor="rgba(0,0,0,0.15)"
+                className="text-sm font-inter-medium text-slate-700 flex-1"
+                placeholder="Tell us more about your ride..."
+                placeholderTextColor="#94A3B8"
                 value={comment}
                 onChangeText={setComment}
                 multiline
                 textAlignVertical="top"
+                maxLength={200}
               />
             </View>
           </View>
@@ -140,28 +141,28 @@ export default function RateRideScreen() {
           onPress={handleSubmit}
           disabled={loading}
           activeOpacity={0.85}
-          className="h-16 rounded-[24px] overflow-hidden shadow-2xl shadow-primary/30"
+          className="h-14 rounded-2xl overflow-hidden shadow-lg shadow-primary/20"
         >
           <LinearGradient
-            colors={[Colors.primary, Colors.primaryDark]}
+            colors={[Colors.primary, '#1E40AF']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             className="flex-1 flex-row items-center justify-center"
           >
             {loading ? <ActivityIndicator color="#FFF" /> : (
               <>
-                <Text className="text-lg font-inter-bold text-white mr-3">Secure Review</Text>
-                <Ionicons name="shield-checkmark" size={20} color="#FFF" />
+                <Text className="text-base font-inter-bold text-white mr-2">Submit Rating</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
               </>
             )}
           </LinearGradient>
         </TouchableOpacity>
 
         <TouchableOpacity
-          className="mt-6 py-2 items-center"
+          className="mt-4 py-2 items-center"
           onPress={() => router.replace('/customer/home' as any)}
         >
-          <Text className="text-sm font-inter-bold text-text-tertiary uppercase tracking-widest">Decide Later</Text>
+          <Text className="text-xs font-inter-bold text-slate-400 uppercase tracking-widest">Skip for now</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

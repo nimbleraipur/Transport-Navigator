@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Platform, Alert, KeyboardAvoidingView, ScrollView, ActivityIndicator, Dimensions, Easing, Image, StatusBar } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Platform, Alert, KeyboardAvoidingView, ScrollView, ActivityIndicator, Dimensions, Easing, Image, StatusBar, Keyboard } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,13 +65,37 @@ function FloatingParticle({ delay, size, startX, startY }: { delay: number; size
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, isAuthenticated, loading: authLoading, sendOtp, verifyOtp } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, sendOtp, verifyOtp, logout } = useAuth();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const appMode = getAppMode();
   const [loading, setLoading] = useState(false);
-  const [sentOtpValue, setSentOtpValue] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const timerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      timerRef.current = setTimeout(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+    } else if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [resendTimer]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const logoScale = useRef(new Animated.Value(0.5)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -114,6 +138,16 @@ export default function LoginScreen() {
     // Only attempt navigation if at root, authenticated and not loading
     if (currentPath === '/' && !authLoading && isAuthenticated && user) {
       const timeoutId = setTimeout(() => {
+        // Strict Role Check: Ensure user is in the correct app
+        if (user.role !== 'admin' && user.role !== appMode) {
+          Alert.alert(
+            'Wrong Application',
+            `Your account is registered as a ${user.role.toUpperCase()}. Please open the ${user.role.toUpperCase()} version of our app to continue.`
+          );
+          logout(); // Clear session if trying to access wrong app
+          return;
+        }
+
         if (!user.name || user.name.trim() === '') {
           router.replace({ pathname: '/register' as any, params: { phone: user.phone, role: appMode } });
         } else {
@@ -133,8 +167,8 @@ export default function LoginScreen() {
     const result = await sendOtp(phone);
     setLoading(false);
     if (result.success) {
-      setSentOtpValue(result.otp || '');
       setOtpSent(true);
+      setResendTimer(30);
       Animated.timing(crossfadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     } else {
       Alert.alert('Error', result.error || 'Failed to send OTP');
@@ -190,144 +224,177 @@ export default function LoginScreen() {
         <FloatingParticle key={p.id} delay={p.delay} size={p.size} startX={p.startX} startY={p.startY} />
       ))}
 
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'android' ? 20 : 0}
+      >
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: 32,
-            paddingTop: insets.top + (Platform.OS === 'web' ? 80 : 60),
+            paddingTop: insets.top + (Platform.OS === 'web' ? 40 : 20),
             paddingBottom: insets.bottom + 40,
             maxWidth: 460,
             alignSelf: 'center',
-            width: '100%'
+            width: '100%',
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View
-            className="items-center mb-10"
-            style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}
-          >
-            <View className="items-center justify-center mb-5">
-              <Animated.View
-                className="absolute w-20 h-20 rounded-full border border-primary/20"
-                style={{ transform: [{ scale: glowPulse }] }}
-              />
-              <View className="w-20 h-20 rounded-2xl bg-white items-center justify-center shadow-2xl border border-white/20 rotate-12">
-                <Image source={appLogo} className="w-12 h-12 -rotate-12" resizeMode="contain" />
-              </View>
-            </View>
-            <Text className="text-3xl font-inter-bold text-surface tracking-[4px] uppercase">{getAppName()}</Text>
-            <View className="flex-row items-center mt-2.5">
-              <View className="h-[1.5px] w-5 bg-primary/40 mr-2.5" />
-              <Text className="text-[10px] font-inter-bold text-white/40 uppercase tracking-[2px]">{getAppSubtitle()}</Text>
-              <View className="h-[1.5px] w-5 bg-primary/40 ml-2.5" />
-            </View>
-          </Animated.View>
-
-          <Animated.View
-            className="bg-white/5 rounded-[32px] p-7 border border-white/10 shadow-2xl"
-            style={{ opacity: formOpacity, transform: [{ translateY: formSlide }] }}
-          >
-            {!otpSent || crossfadeAnim ? (
-              <Animated.View
-                style={{ opacity: phoneOpacity, transform: [{ translateX: phoneTranslateX }] }}
-                pointerEvents={otpSent ? 'none' : 'auto'}
-              >
-                <Text className="text-[9px] font-inter-bold text-white/30 mb-4 uppercase tracking-[2px]">Enter Mobile Number</Text>
-                <View className="flex-row items-center mb-6">
-                  <View className="w-14 h-14 rounded-xl bg-white/5 items-center justify-center border border-white/10 mr-3">
-                    <Text className="text-base font-inter-bold text-surface">+91</Text>
-                  </View>
-                  <TextInput
-                    className="flex-1 h-14 rounded-xl bg-white/5 px-4 text-lg font-inter-bold text-surface border border-white/10"
-                    placeholder="Mobile Number"
-                    placeholderTextColor="rgba(255,255,255,0.12)"
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                    value={phone}
-                    onChangeText={setPhone}
-                  />
-                </View>
-                <TouchableOpacity
-                  className="h-14 rounded-xl overflow-hidden shadow-2xl shadow-primary/20"
-                  onPress={handleSendOtp}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={[Colors.primary, Colors.primaryDark]}
-                    className="flex-1 items-center justify-center flex-row"
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color={Colors.surface} />
-                    ) : (
-                      <>
-                        <Text className="text-sm font-inter-bold text-surface mr-2">Secure Login</Text>
-                        <Ionicons name="shield-checkmark" size={16} color={Colors.surface} />
-                      </>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
-            ) : null}
-
-            {otpSent ? (
-              <Animated.View
-                className="absolute inset-x-7 top-7"
-                style={{ opacity: otpOpacity, transform: [{ translateX: otpTranslateX }] }}
-              >
-                <View className="flex-row items-center justify-between mb-5">
-                  <TouchableOpacity onPress={backToPhone} className="w-9 h-9 rounded-xl bg-white/5 items-center justify-center border border-white/10">
-                    <Ionicons name="chevron-back" size={18} color={Colors.surface} />
-                  </TouchableOpacity>
-                  <Text className="text-base font-inter-bold text-surface">Security Code</Text>
-                  <View className="w-9" />
-                </View>
-
-                <Text className="text-[13px] font-inter text-white/40 text-center mb-6 leading-5">Verification code sent to{'\n'}
-                  <Text className="text-accent font-inter-bold">+91 {phone}</Text>
-                </Text>
-
-
-
-                <TextInput
-                  className="h-14 rounded-xl bg-white/5 px-4 text-3xl font-inter-bold text-surface border border-white/10 mb-6 text-center tracking-widest"
-                  placeholder="0000"
-                  placeholderTextColor="rgba(255,255,255,0.05)"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  value={otp}
-                  onChangeText={setOtp}
-                  autoFocus
+          <View className="justify-center py-10" style={{ minHeight: '100%' }}>
+            <Animated.View
+              className={keyboardVisible ? "items-center mb-4" : "items-center mb-10"}
+              style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}
+            >
+              <View className={keyboardVisible ? "items-center justify-center mb-4" : "items-center justify-center mb-6"}>
+                <Animated.View
+                  className="absolute w-28 h-28 rounded-full border border-primary/20 bg-primary/5 shadow-2xl shadow-primary/30"
+                  style={{ transform: [{ scale: keyboardVisible ? 0.6 : glowPulse }] }}
                 />
+                <Image
+                  source={appLogo}
+                  style={{ width: keyboardVisible ? 55 : 85, height: keyboardVisible ? 55 : 85 }}
+                  resizeMode="contain"
+                />
+              </View>
+              <View className="items-center">
+                <Text className="text-3xl font-inter-bold text-surface tracking-[6px] uppercase text-center">{getAppName().replace(' Driver', '')}</Text>
+                {getAppName().includes('Driver') && (
+                  <Text className="text-3xl font-inter-bold text-surface tracking-[8px] uppercase text-center mt-1">DRIVER</Text>
+                )}
+              </View>
+              <View className="flex-row items-center mt-4">
+                <View className="h-[1px] w-8 bg-white/20 mr-3" />
+                <Text className="text-[10px] font-inter-bold text-white/40 uppercase tracking-[3px]">{getAppSubtitle()}</Text>
+                <View className="h-[1px] w-8 bg-white/20 ml-3" />
+              </View>
+            </Animated.View>
 
-                <TouchableOpacity
-                  className="h-14 rounded-xl overflow-hidden shadow-2xl shadow-primary/20"
-                  onPress={handleVerifyOtp}
-                  disabled={loading}
-                  activeOpacity={0.8}
+            <Animated.View
+              className="bg-white/5 rounded-[32px] p-8 border border-white/10 shadow-2xl"
+              style={{
+                opacity: formOpacity,
+                transform: [
+                  { translateY: formSlide },
+                  { scale: logoScale } // Reuse scale animation for a subtle pop on load
+                ]
+              }}
+            >
+              {!otpSent || crossfadeAnim ? (
+                <Animated.View
+                  style={{ opacity: phoneOpacity, transform: [{ translateX: phoneTranslateX }] }}
+                  pointerEvents={otpSent ? 'none' : 'auto'}
                 >
-                  <LinearGradient
-                    colors={[Colors.primary, Colors.primaryDark]}
-                    className="flex-1 items-center justify-center"
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
+                  <Text className="text-[10px] font-inter-bold text-white/30 mb-5 uppercase tracking-[2.5px]">Enter Mobile Number</Text>
+                  <View className="flex-row items-center mb-8 h-14">
+                    <View className="w-16 h-full rounded-2xl bg-white/5 items-center justify-center border border-white/10 mr-4">
+                      <Text className="text-lg font-inter-bold text-surface">+91</Text>
+                    </View>
+                    <TextInput
+                      className="flex-1 h-full rounded-2xl bg-white/5 px-5 text-xl font-inter-bold text-surface border border-white/10"
+                      placeholder="Mobile Number"
+                      placeholderTextColor="rgba(255,255,255,0.15)"
+                      keyboardType="phone-pad"
+                      maxLength={10}
+                      value={phone}
+                      onChangeText={setPhone}
+                      style={Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    className="h-16 rounded-[20px] overflow-hidden shadow-2xl shadow-primary/40"
+                    onPress={handleSendOtp}
+                    disabled={loading}
+                    activeOpacity={0.85}
                   >
-                    {loading ? (
-                      <ActivityIndicator color={Colors.surface} />
+                    <LinearGradient
+                      colors={['#000000', '#1A1A1A']}
+                      className="flex-1 items-center justify-center flex-row"
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color={Colors.surface} />
+                      ) : (
+                        <>
+                          <Text className="text-base font-inter-bold text-surface mr-3">Secure Login</Text>
+                          <Ionicons name="shield-checkmark" size={18} color={Colors.surface} />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </Animated.View>
+              ) : null}
+
+              {otpSent ? (
+                <Animated.View
+                  className="absolute inset-x-7 top-7"
+                  style={{ opacity: otpOpacity, transform: [{ translateX: otpTranslateX }] }}
+                >
+                  <View className="flex-row items-center justify-between mb-5">
+                    <TouchableOpacity onPress={backToPhone} className="w-9 h-9 rounded-xl bg-white/5 items-center justify-center border border-white/10">
+                      <Ionicons name="chevron-back" size={18} color={Colors.surface} />
+                    </TouchableOpacity>
+                    <Text className="text-base font-inter-bold text-surface">Security Code</Text>
+                    <View className="w-9" />
+                  </View>
+
+                  <Text className="text-[13px] font-inter text-white/40 text-center mb-6 leading-5">Verification code sent to{'\n'}
+                    <Text className="text-primary-light font-inter-bold">+91 {phone}</Text>
+                  </Text>
+
+
+
+                  <TextInput
+                    className="h-16 rounded-2xl bg-white/5 px-4 text-3xl font-inter-bold text-surface border border-white/10 mb-8 text-center tracking-[12px]"
+                    placeholder="0000"
+                    placeholderTextColor="rgba(255,255,255,0.1)"
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    value={otp}
+                    onChangeText={setOtp}
+                    autoFocus
+                    style={Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}}
+                  />
+
+                  <TouchableOpacity
+                    className="h-16 rounded-[20px] overflow-hidden shadow-2xl shadow-primary/30"
+                    onPress={handleVerifyOtp}
+                    disabled={loading}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient
+                      colors={['#000000', '#1A1A1A']}
+                      className="flex-1 items-center justify-center"
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color={Colors.surface} />
+                      ) : (
+                        <Text className="text-base font-inter-bold text-surface">Verify Identity</Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <View className="mt-8 items-center">
+                    {resendTimer > 0 ? (
+                      <Text className="text-[11px] font-inter-medium text-white/30 uppercase tracking-[1px]">
+                        Resend code in <Text className="text-primary-light font-inter-bold">{resendTimer}s</Text>
+                      </Text>
                     ) : (
-                      <Text className="text-sm font-inter-bold text-surface">Verify Identity</Text>
+                      <TouchableOpacity onPress={handleSendOtp} disabled={loading}>
+                        <Text className="text-[11px] font-inter-bold text-primary-light uppercase tracking-[2px] py-2">
+                          Resend Verification Code
+                        </Text>
+                      </TouchableOpacity>
                     )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
-            ) : null}
-          </Animated.View>
-
-
+                  </View>
+                </Animated.View>
+              ) : null}
+            </Animated.View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

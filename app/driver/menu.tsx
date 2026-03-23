@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Animated, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Animated, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, Feather, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,16 +93,20 @@ export default function DriverMenuScreen() {
           <Text className="flex-1 text-center text-lg font-inter-bold text-surface mr-10">Driver Terminal</Text>
         </View>
 
-        <View className="flex-row items-center px-8">
+        <View className="flex-row items-center px-8 ">
           <View className="w-16 h-16 rounded-2xl bg-white/10 items-center justify-center border border-white/10 shadow-2xl overflow-hidden">
-            <LinearGradient
-              colors={['#102238', '#1C2B4A']}
-              className="w-full h-full items-center justify-center"
-            >
-              <FontAwesome5 name="user-tie" size={24} color={Colors.surface} />
-            </LinearGradient>
+            {user?.profileSelfie ? (
+              <Image source={{ uri: user.profileSelfie }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+              <LinearGradient
+                colors={['#102238', '#1C2B4A']}
+                className="w-full h-full items-center justify-center"
+              >
+                <FontAwesome5 name="user-tie" size={24} color={Colors.surface} />
+              </LinearGradient>
+            )}
           </View>
-          <View className="ml-4.5 flex-1">
+          <View className="ml-4.5 flex-1 pl-4">
             <Text className="text-xl font-inter-bold text-surface">{user?.name || 'Driver'}</Text>
             <View className="flex-row items-center mt-1">
               <View className="bg-accent/20 px-2 py-0.5 rounded-lg border border-accent/20 mr-2">

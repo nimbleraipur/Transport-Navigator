@@ -26,6 +26,7 @@ export default function DriverLayout() {
       <Stack.Screen name="support" />
       <Stack.Screen name="verify" />
       <Stack.Screen name="pending-approval" />
+      <Stack.Screen name="wallet" />
     </Stack>
   );
 }

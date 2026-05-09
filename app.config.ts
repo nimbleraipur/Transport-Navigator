@@ -5,32 +5,33 @@ const IS_DRIVER = APP_MODE === 'driver';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: IS_DRIVER ? 'My Load 24 Driver' : 'My Load 24',
-  slug: 'my-load-24', // Must match the project ID on Expo dashboard
+  name: IS_DRIVER ? 'My Load Driver' : 'My Load 24',
+  slug: 'md-raza-chouhan', // Must match the project ID on Expo dashboard
   version: '1.0.0',
   orientation: 'portrait',
-  icon: IS_DRIVER ? './assets/images/driver-app-icon.png' : './assets/images/icon.png',
+  icon: IS_DRIVER ? './assets/images/Myload_Driver.png' : './assets/images/icon.png',
   scheme: IS_DRIVER ? 'myload24driver' : 'myload24',
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   splash: {
-    image: './assets/images/splash.gif',
-    resizeMode: 'cover',
-    backgroundColor: '#0A1628',
+    image: './assets/images/logo.png',
+    resizeMode: 'contain',
+    backgroundColor: '#FFFFFF',
   },
   ios: {
     supportsTablet: false,
-    bundleIdentifier: IS_DRIVER ? 'com.myload24.driver' : 'com.myload24',
+    bundleIdentifier: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
     config: {
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyD-VnFv88AltoKA26oOvMfIWouWL_-JQEc"
     }
   },
   android: {
-    package: IS_DRIVER ? 'com.myload24.driver' : 'com.myload24',
+    package: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
+    versionCode: 2,
     softwareKeyboardLayoutMode: 'pan',
     adaptiveIcon: {
       backgroundColor: '#0A1628',
-      foregroundImage: IS_DRIVER ? './assets/images/driver-app-icon.png' : './assets/images/icon.png',
+      foregroundImage: IS_DRIVER ? './assets/images/Myload_Driver.png' : './assets/images/icon.png',
     },
     config: {
       googleMaps: {
@@ -57,7 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     eas: {
-      projectId: "55d64891-0c59-4b08-bd13-9b26f4269fac"
+      projectId: "b59bcbe1-1876-4a8a-a87e-6684317f62b4"
     }
   }
 });

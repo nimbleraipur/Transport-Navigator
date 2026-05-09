@@ -7,9 +7,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 
 const SUPPORT_OPTIONS = [
-  { icon: 'mail-outline', label: 'Email Us', desc: 'support@transportgo.in', action: 'mailto:support@transportgo.in' },
-  { icon: 'call-outline', label: 'Call Us', desc: '+91 731-XXXX-XXX', action: 'tel:+917310000000' },
-  { icon: 'logo-whatsapp', label: 'WhatsApp', desc: 'Chat with us on WhatsApp', action: 'https://wa.me/917310000000' },
+  { icon: 'mail-outline', label: 'Email Us', desc: 'myload24ktg@gmail.com', action: 'mailto:myload24ktg@gmail.com' },
+  { icon: 'call-outline', label: 'Call Us', desc: '+91 7354647786', action: 'tel:+917354647786' },
+  { icon: 'logo-whatsapp', label: 'WhatsApp', desc: 'Chat with us on WhatsApp', action: 'https://wa.me/917354647786' },
 ];
 
 const TOPICS = [

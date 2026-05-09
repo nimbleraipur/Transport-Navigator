@@ -9,7 +9,7 @@
         },
         "customer": {
             "android": {
-                "buildType": "apk"
+                "buildType": "app-bundle"
             },
             "env": {
                 "EXPO_PUBLIC_APP_MODE": "customer",
@@ -19,7 +19,7 @@
         },
         "driver": {
             "android": {
-                "buildType": "apk"
+                "buildType": "app-bundle"
             },
             "env": {
                 "EXPO_PUBLIC_APP_MODE": "driver",
@@ -32,3 +32,5 @@
         "production": {}
     }
 }
+
+

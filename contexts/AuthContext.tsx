@@ -13,6 +13,7 @@ export interface UserData {
   isOnline?: boolean;
   isApproved?: boolean;
   rating?: number;
+  walletBalance?: number;
   totalTrips?: number;
   totalEarnings?: number;
   location?: { lat: number; lng: number };

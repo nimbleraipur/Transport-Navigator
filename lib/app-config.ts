@@ -7,7 +7,7 @@ export function getAppMode(): AppMode {
 }
 
 export function getAppName(): string {
-  return getAppMode() === 'driver' ? 'My Load 24 Driver' : 'My Load 24';
+  return getAppMode() === 'driver' ? 'My Load Driver' : 'My Load 24';
 }
 
 export function getAppSubtitle(): string {

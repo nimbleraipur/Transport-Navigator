@@ -26,11 +26,17 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [showGif, setShowGif] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
 
   useEffect(() => {
-    // 5 second timer for GIF splash
-    const timer = setTimeout(() => {
+    // 2 second timer for logo
+    const logoTimer = setTimeout(() => {
+      setShowGif(true);
+    }, 2000);
+
+    // 5 second timer for total splash sequence
+    const finishTimer = setTimeout(() => {
       setSplashFinished(true);
     }, 5000);
 
@@ -71,24 +77,42 @@ export default function RootLayout() {
         window.removeEventListener('unhandledrejection', rejectionHandler);
       };
     }
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(logoTimer);
+      clearTimeout(finishTimer);
+    };
   }, []);
 
   useEffect(() => {
-    if (ready) {
-      SplashScreen.hideAsync().catch(() => {});
+    if (ready && showGif) {
+      // Hide native splash ONLY when fonts are ready AND it's time to show the GIF
+      const hideTimer = setTimeout(() => {
+        SplashScreen.hideAsync().catch(() => {});
+      }, 50);
+      return () => clearTimeout(hideTimer);
     }
-  }, [ready]);
+  }, [ready, showGif]);
 
   if (!ready || !splashFinished) {
     return (
       <View style={styles.splashContainer}>
-        <Image
-          source={require('../assets/images/splash.gif')}
-          style={styles.splashImage}
-          contentFit="cover"
-          priority="high"
-        />
+        {!showGif ? (
+          <View style={{ position: 'absolute', top: '42%', alignItems: 'center' }}>
+            <Image
+              source={require('../assets/images/logo.png')}
+              style={{ width: 220, height: 220 }}
+              contentFit="contain"
+              priority="high"
+            />
+          </View>
+        ) : (
+          <Image
+            source={require('../assets/images/splash.gif')}
+            style={styles.splashImage}
+            contentFit="cover"
+            priority="high"
+          />
+        )}
       </View>
     );
   }
@@ -115,7 +139,7 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   splashContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -104,11 +104,13 @@ function VehicleOption({
   isActive,
   distance,
   onPress,
+  isCalculating,
 }: {
   vehicle: any;
   isActive: boolean;
   distance: number;
   onPress: () => void;
+  isCalculating: boolean;
 }) {
   const totalPrice = (vehicle.baseFare || 0) + Math.round((distance || 0) * (vehicle.perKmCharge || 0));
 
@@ -126,8 +128,14 @@ function VehicleOption({
         <Text className="text-[10px] font-inter-medium text-text-tertiary">{vehicle.capacity}</Text>
       </View>
       <View className="items-end">
-        <Text className="text-base font-inter-bold text-text">₹{totalPrice}</Text>
-        <Text className="text-[9px] font-inter-bold text-primary uppercase mt-0.5 tracking-wider">₹{vehicle.perKmCharge}/km</Text>
+        {isCalculating ? (
+          <ActivityIndicator size="small" color={Colors.primary} />
+        ) : (
+          <>
+            <Text className="text-base font-inter-bold text-text">₹{totalPrice}</Text>
+            <Text className="text-[9px] font-inter-bold text-primary uppercase mt-0.5 tracking-wider">₹{vehicle.perKmCharge}/km</Text>
+          </>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -297,7 +305,7 @@ export default function NewBookingScreen() {
       pickup: sanitizedPickup,
       delivery: sanitizedDelivery,
       vehicleType: selectedVehicle.type || 'auto',
-      totalPrice: (selectedVehicle.baseFare || 0) + Math.round((distance || 0) * (selectedVehicle.perKmCharge || selectedVehicle.perKm || 0)),
+      totalPrice: (selectedVehicle.baseFare || 0) + Math.round((distance || 0) * (selectedVehicle.perKmCharge || 0)),
       distance,
     });
     setLoading(false);
@@ -628,8 +636,12 @@ export default function NewBookingScreen() {
           <View className="p-6">
             <View className="flex-row items-center justify-between mb-5">
               <Text className="text-lg font-inter-bold text-text">Select Ride</Text>
-              <View className="bg-primary/10 px-3 py-1.5 rounded-xl">
-                <Text className="text-[11px] font-inter-bold text-primary">{distance} km</Text>
+              <View className="bg-primary/10 px-3 py-1.5 rounded-xl min-w-[60px] items-center">
+                {calculatingDistance ? (
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                ) : (
+                  <Text className="text-[11px] font-inter-bold text-primary">{distance} km</Text>
+                )}
               </View>
             </View>
 
@@ -639,6 +651,7 @@ export default function NewBookingScreen() {
                   key={v.id || v.type}
                   vehicle={v}
                   distance={distance}
+                  isCalculating={calculatingDistance}
                   isActive={selectedVehicle?.type === v.type}
                   onPress={() => setSelectedVehicle(v)}
                 />
@@ -648,7 +661,7 @@ export default function NewBookingScreen() {
             <TouchableOpacity
               className="mt-6 h-14 rounded-2xl overflow-hidden shadow-lg shadow-primary/20"
               onPress={handleConfirmBooking}
-              disabled={loading}
+              disabled={loading || calculatingDistance}
               activeOpacity={0.9}
             >
               <LinearGradient

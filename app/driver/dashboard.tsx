@@ -54,19 +54,19 @@ function AnimatedStatCard({
   return (
     <Animated.View
       style={{ opacity, transform: [{ translateY }, { scale }] }}
-      className="flex-1 bg-surface rounded-2xl p-4 border border-gray-100 shadow-xl shadow-black/5"
+      className="flex-1 bg-surface rounded-2xl p-4 border border-gray-100 shadow-xl shadow-black/5 items-center justify-center"
     >
       <View
-        className="w-10 h-10 rounded-xl items-center justify-center mb-3 shadow-sm"
+        className="w-12 h-12 rounded-2xl items-center justify-center mb-3 shadow-sm"
         style={{ backgroundColor: iconBg }}
       >
         {icon}
       </View>
-      <View>
+      <View className="items-center">
         <Text className="text-xl font-inter-bold text-text mb-0.5">{value}</Text>
-        <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px]">{label}</Text>
+        <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] text-center">{label}</Text>
       </View>
-      <View className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color + '40' }} />
+      <View className="absolute top-4 right-4 w-2 h-2 rounded-full" style={{ backgroundColor: color + '40' }} />
     </Animated.View>
   );
 }
@@ -326,6 +326,11 @@ export default function DriverDashboardScreen() {
           socket.emit('driver:online', { driverId: user.id });
         });
 
+        socket.on('wallet:updated', (data: { balance: number }) => {
+          console.log('[SOCKET] Wallet updated via admin:', data.balance);
+          refreshUser();
+        });
+
         // Get initial position
         const currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (currentLoc && socket) {
@@ -508,34 +513,46 @@ export default function DriverDashboardScreen() {
         contentContainerStyle={{ padding: 24, paddingTop: 32, paddingBottom: bottomInset + 20 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="flex-row mb-8" style={{ marginHorizontal: -8 }}>
-          <View className="flex-1 px-2">
+        <View className="flex-row flex-wrap mb-4" style={{ marginHorizontal: -8 }}>
+          <View className="w-1/2 px-2 mb-4">
             <AnimatedStatCard
               index={0}
+              icon={<MaterialCommunityIcons name="currency-inr" size={24} color="#10B981" />}
+              iconBg="#D1FAE5"
+              value={`₹${user?.totalEarnings ?? 0}`}
+              label="Earnings"
+              color="#10B981"
+            />
+          </View>
+          <View className="w-1/2 px-2 mb-4">
+            <TouchableOpacity onPress={() => router.push('/driver/wallet' as any)} activeOpacity={0.8} style={{ flex: 1 }}>
+              <AnimatedStatCard
+                index={1}
+                icon={<MaterialCommunityIcons name="wallet-outline" size={24} color={(user?.walletBalance ?? 0) < 0 ? '#EF4444' : '#3B82F6'} />}
+                iconBg={(user?.walletBalance ?? 0) < 0 ? '#FEE2E2' : '#DBEAFE'}
+                value={`₹${user?.walletBalance ?? 0}`}
+                label="Balance"
+                color={(user?.walletBalance ?? 0) < 0 ? '#EF4444' : '#3B82F6'}
+              />
+            </TouchableOpacity>
+          </View>
+          <View className="w-1/2 px-2 mb-4">
+            <AnimatedStatCard
+              index={2}
               icon={<FontAwesome5 name="route" size={22} color={Colors.primary} />}
               iconBg={Colors.primaryLight}
               value={String(user?.totalTrips ?? 0)}
-              label="Trips"
+              label="Total Trips"
               color={Colors.primary}
             />
           </View>
-          <View className="flex-1 px-2">
+          <View className="w-1/2 px-2 mb-4">
             <AnimatedStatCard
-              index={1}
-              icon={<MaterialCommunityIcons name="wallet-outline" size={24} color={Colors.success} />}
-              iconBg={Colors.successLight}
-              value={`₹${user?.totalEarnings ?? 0}`}
-              label="Wallet"
-              color={Colors.success}
-            />
-          </View>
-          <View className="flex-1 px-2">
-            <AnimatedStatCard
-              index={2}
+              index={3}
               icon={<Ionicons name="star" size={22} color={Colors.warning} />}
               iconBg={Colors.warningLight}
               value={user?.rating ? user.rating.toFixed(1) : '5.0'}
-              label="Rating"
+              label="Avg. Rating"
               color={Colors.warning}
             />
           </View>
@@ -545,6 +562,13 @@ export default function DriverDashboardScreen() {
           isOnline={user?.isOnline ?? false}
           onPress={() => {
             if (user?.isOnline) {
+              if ((user?.walletBalance ?? 0) < 0) {
+                Alert.alert(
+                  'Account Blocked',
+                  'Your wallet balance has gone negative. Please recharge your account to continue receiving and accepting ride requests.'
+                );
+                return;
+              }
               router.push('/driver/requests' as any);
             } else {
               Alert.alert('Radar Offline', 'You must go online to view and accept ride requests.');

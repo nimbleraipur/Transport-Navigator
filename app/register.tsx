@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, ActivityIndicator, Animated, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView, ActivityIndicator, Animated, Dimensions, Image } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/query-client';
+import { getVehicleImageSource } from '@/lib/vehicles';
+
+const normalizeVehicleIcon = (icon?: string) => {
+  if (icon === 'rickshaw') return 'auto-rickshaw';
+  if (icon === 'van-utility') return 'truck-delivery';
+  return icon || 'truck';
+};
 
 function AnimatedInput({ onFocus, onBlur, label, ...props }: any) {
   const [isFocused, setIsFocused] = useState(false);
@@ -51,6 +58,8 @@ function VehicleCard({ vehicle, isActive, onPress, index }: { vehicle: { type: s
     ]).start();
   }, []);
 
+  const imgSource = getVehicleImageSource(vehicle.icon, vehicle.type);
+
   return (
     <Animated.View style={{ flex: 1, opacity, transform: [{ scale: isActive ? 1.05 : 1 }] }} className="px-1">
       <TouchableOpacity
@@ -58,8 +67,12 @@ function VehicleCard({ vehicle, isActive, onPress, index }: { vehicle: { type: s
         onPress={onPress}
         activeOpacity={0.8}
       >
-        <View className={`w-10 h-10 rounded-xl items-center justify-center mb-2 ${isActive ? 'bg-primary/10' : 'bg-gray-50'}`}>
-          <MaterialCommunityIcons name={vehicle.icon} size={24} color={isActive ? Colors.primary : Colors.textTertiary} />
+        <View className={`w-12 h-12 rounded-xl items-center justify-center mb-2 ${isActive ? 'bg-primary/10' : 'bg-gray-50'}`}>
+          <Image
+            source={imgSource}
+            style={{ width: 36, height: 36 }}
+            resizeMode="contain"
+          />
         </View>
         <Text className={`text-[10px] font-inter-bold uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-tertiary'}`}>{vehicle.label}</Text>
       </TouchableOpacity>
@@ -104,7 +117,7 @@ export default function RegisterScreen() {
         const options = data.vehicles.map((v: any, index: number) => ({
           type: v.type,
           label: v.name,
-          icon: v.icon || (v.type?.toLowerCase().includes('auto') ? 'rickshaw' : 'truck'),
+          icon: v.icon || (v.type?.toLowerCase().includes('auto') ? 'auto-rickshaw' : v.type?.toLowerCase().includes('tempo') ? 'truck-delivery' : 'truck'),
         }));
         setAvailableVehicles(options);
         setVehicleType(data.vehicles[0].type);
@@ -113,8 +126,9 @@ export default function RegisterScreen() {
       console.error('Failed to fetch vehicles:', e);
       // Fallback
       setAvailableVehicles([
-        { type: 'auto', label: 'Auto', icon: 'rickshaw' as const },
-        { type: 'tempo', label: 'Tempo', icon: 'van-utility' as const },
+        { type: 'auto', label: 'Auto', icon: 'auto-rickshaw' as const },
+        { type: 'e-rickshaw', label: 'E-Rickshaw', icon: 'e-rickshaw' as const },
+        { type: 'tempo', label: 'Tempo', icon: 'truck-delivery' as const },
         { type: 'truck', label: 'Truck', icon: 'truck' as const },
       ]);
     } finally {

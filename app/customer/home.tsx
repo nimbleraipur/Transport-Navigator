@@ -220,8 +220,8 @@ export default function CustomerHomeScreen() {
         >
           <View className="items-center mb-6">
             <View className="w-10 h-1 bg-gray-100 rounded-full mb-5" />
-            <Text className="text-xl font-inter-bold text-text text-center">Where are we going?</Text>
-            <Text className="text-[13px] font-inter-medium text-text-tertiary mt-1.5">Pick a destination for your ride</Text>
+            <Text className="text-xl font-inter-bold text-text text-center">Where to deliver?</Text>
+            <Text className="text-[13px] font-inter-medium text-text-tertiary mt-1.5">Book a vehicle to transport your load</Text>
           </View>
 
           <TouchableOpacity
@@ -233,7 +233,7 @@ export default function CustomerHomeScreen() {
               <View className="w-9 h-9 rounded-lg bg-primary/10 items-center justify-center mr-3">
                 <Ionicons name="search" size={20} color={Colors.primary} />
               </View>
-              <Text className="flex-1 text-base font-inter-bold text-text-secondary">Where to?</Text>
+              <Text className="flex-1 text-base font-inter-bold text-text-secondary">Enter delivery destination...</Text>
               <Ionicons name="arrow-forward" size={18} color={Colors.divider} />
             </View>
           </TouchableOpacity>

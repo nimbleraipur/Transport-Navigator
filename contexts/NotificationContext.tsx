@@ -1,23 +1,28 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useAuth } from '@/contexts/AuthContext';
 
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
 let Notifications: any = null;
-try {
-  Notifications = require('expo-notifications');
-  // Configure how notifications are handled when the app is foregrounded
-  Notifications?.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-} catch (error) {
-  console.warn('Expo Notifications module failed to load:', error);
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+    // Configure how notifications are handled when the app is foregrounded
+    Notifications?.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (error) {
+    console.warn('Expo Notifications module failed to load:', error);
+  }
 }
 
 export interface NotificationItem {

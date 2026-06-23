@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,17 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBookings } from '@/contexts/BookingContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import Colors from '@/constants/colors';
 import { getApiUrl } from '@/lib/query-client';
+import { getVehicleImageSource } from '@/lib/vehicles';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
+import { useBookingSound } from '@/lib/useBookingSound';
 
 function AnimatedStatCard({
   index,
@@ -234,14 +237,20 @@ function AnimatedCompletedCard({
     ]).start();
   }, []);
 
+  const imgSource = getVehicleImageSource(undefined, booking.vehicleType);
+
   return (
     <Animated.View
       style={{ opacity, transform: [{ translateX: slideX }] }}
       className="flex-row items-center justify-between bg-surface rounded-xl p-3.5 mb-3 border border-gray-50 shadow-sm"
     >
       <View className="flex-row items-center flex-1 mr-3">
-        <View className="w-10 h-10 rounded-xl bg-gray-50 items-center justify-center mr-3.5">
-          <MaterialCommunityIcons name={getVehicleIcon(booking.vehicleType) as any} size={20} color={Colors.textSecondary} />
+        <View className="w-12 h-12 rounded-xl bg-gray-50 items-center justify-center mr-3.5">
+          <Image
+            source={imgSource}
+            style={{ width: 36, height: 36 }}
+            resizeMode="contain"
+          />
         </View>
         <View className="flex-1">
           <Text className="text-sm font-inter-bold text-text" numberOfLines={1}>{booking.delivery.name}</Text>
@@ -268,6 +277,34 @@ export default function DriverDashboardScreen() {
   const { bookings, fetchBookings, getActiveBooking, checkOperationalAvailability } = useBookings();
   const { unreadCount } = useNotifications();
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
+  const isFocused = useIsFocused();
+
+  // Sound and Popup Notification logic for Online Driver
+  const { playBookingAlert, stopBookingAlert } = useBookingSound();
+  const [newRequest, setNewRequest] = useState<any | null>(null);
+  const slideAnim = useRef(new Animated.Value(-200)).current;
+  const timeoutRef = useRef<any>(null);
+
+  const hideRequestPopup = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    stopBookingAlert();
+    Animated.timing(slideAnim, {
+      toValue: -200,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setNewRequest(null);
+    });
+  }, [slideAnim, stopBookingAlert]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      hideRequestPopup();
+    }
+  }, [isFocused, hideRequestPopup]);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
@@ -296,7 +333,7 @@ export default function DriverDashboardScreen() {
     }
   }, [user?.verificationStatus]);
 
-  // Location tracking for Admin Panel
+  // Location tracking for Admin Panel & Real-time Booking Notifications
   useEffect(() => {
     if (!user?.isOnline || !token) return;
 
@@ -329,6 +366,32 @@ export default function DriverDashboardScreen() {
         socket.on('wallet:updated', (data: { balance: number }) => {
           console.log('[SOCKET] Wallet updated via admin:', data.balance);
           refreshUser();
+        });
+
+        // Real-time booking popup and sound listener
+        socket.on('booking:new', (data: { booking: any }) => {
+          if (!isFocused || getActiveBooking()) {
+            console.log('[SOCKET] Driver is already in an active ride or dashboard not focused, ignoring new booking request');
+            return;
+          }
+          console.log('[SOCKET] New request arrived on dashboard:', data.booking.id);
+          playBookingAlert();
+          setNewRequest(data.booking);
+          
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+          }
+          
+          Animated.spring(slideAnim, {
+            toValue: 20,
+            useNativeDriver: true,
+            tension: 80,
+            friction: 8,
+          }).start();
+
+          timeoutRef.current = setTimeout(() => {
+            hideRequestPopup();
+          }, 30000);
         });
 
         // Get initial position
@@ -368,12 +431,16 @@ export default function DriverDashboardScreen() {
 
     return () => {
       if (locationSubscription) locationSubscription.remove();
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      stopBookingAlert();
       if (socket) {
         socket.emit('driver:offline', { driverId: user.id });
         socket.disconnect();
       }
     };
-  }, [user?.isOnline, token]);
+  }, [user?.isOnline, token, stopBookingAlert]);
 
   const handleToggleOnline = async () => {
     if (isTogglingOnline) return;
@@ -434,8 +501,8 @@ export default function DriverDashboardScreen() {
   const getVehicleIcon = (type: string) => {
     if (!type) return 'truck';
     switch (type.toLowerCase()) {
-      case 'auto': return 'rickshaw';
-      case 'tempo': return 'van-utility';
+      case 'auto': return 'auto-rickshaw';
+      case 'tempo': return 'truck-delivery';
       case 'truck': return 'truck';
       default: return 'truck';
     }
@@ -600,6 +667,68 @@ export default function DriverDashboardScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Real-time New Ride Request Floating Banner */}
+      {newRequest && (
+        <Animated.View
+          style={[
+            {
+              position: 'absolute',
+              top: topInset,
+              left: 16,
+              right: 16,
+              zIndex: 9999,
+              transform: [{ translateY: slideAnim }],
+            }
+          ]}
+          className="bg-surface rounded-2xl p-4 shadow-2xl border border-primary/20 flex-row items-center justify-between"
+        >
+          {/* Ride Details (Pickup, Drop, Price) */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            className="flex-1 mr-3"
+            onPress={() => {
+              hideRequestPopup();
+              router.push('/driver/requests' as any);
+            }}
+          >
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-[10px] font-inter-bold text-primary uppercase tracking-widest bg-primary/10 px-2 py-0.5 rounded">
+                New Ride Request
+              </Text>
+              <Text className="text-base font-inter-bold text-text">₹{newRequest.totalPrice}</Text>
+            </View>
+            
+            <View className="space-y-1">
+              <Text className="text-xs font-inter-semibold text-text-secondary" numberOfLines={1}>
+                🟢 From: {newRequest.pickup.name}
+              </Text>
+              <Text className="text-xs font-inter-semibold text-text-secondary" numberOfLines={1}>
+                🔴 To: {newRequest.delivery.name}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Quick Action Buttons */}
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => {
+                hideRequestPopup();
+                router.push('/driver/requests' as any);
+              }}
+              className="bg-primary px-3 py-2.5 rounded-xl mr-2"
+            >
+              <Text className="text-xs font-inter-bold text-surface">View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={hideRequestPopup}
+              className="bg-gray-100 p-2.5 rounded-xl"
+            >
+              <Ionicons name="close" size={18} color={Colors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }

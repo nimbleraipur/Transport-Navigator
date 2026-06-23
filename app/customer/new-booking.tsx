@@ -13,6 +13,7 @@ import {
   Dimensions,
   StatusBar,
   Keyboard,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ import RouteMap from '@/components/RouteMap';
 import { useBookings } from '@/contexts/BookingContext';
 import Colors from '@/constants/colors';
 import LocationPickerMap from '@/components/LocationPickerMap';
+import { getVehicleImageSource } from '@/lib/vehicles';
 
 import { MOCK_LOCATIONS, BILASPUR_REGION } from '@/lib/locations';
 
@@ -113,28 +115,50 @@ function VehicleOption({
   isCalculating: boolean;
 }) {
   const totalPrice = (vehicle.baseFare || 0) + Math.round((distance || 0) * (vehicle.perKmCharge || 0));
+  const imgSource = getVehicleImageSource(vehicle.icon, vehicle.type);
 
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
-      className={`flex-row items-center p-3.5 rounded-2xl mb-2.5 border transition-all ${isActive ? 'border-primary bg-primary/5' : 'border-gray-50 bg-white'}`}
+      className="flex-row items-center py-3 mb-2 transition-all"
     >
-      <View className={`w-11 h-11 rounded-xl items-center justify-center mr-4 ${isActive ? 'bg-primary/10' : 'bg-gray-100'}`}>
-        <MaterialCommunityIcons name={(vehicle.icon || 'truck') as any} size={24} color={isActive ? Colors.primary : Colors.textSecondary} />
+      <View className="w-16 h-16 items-center justify-center mr-4">
+        <Image
+          source={imgSource}
+          style={{ width: 56, height: 56 }}
+          resizeMode="contain"
+        />
       </View>
       <View className="flex-1">
-        <Text className={`text-sm font-inter-bold ${isActive ? 'text-text' : 'text-text-secondary'} mb-0.5`}>{vehicle.name || vehicle.type}</Text>
-        <Text className="text-[10px] font-inter-medium text-text-tertiary">{vehicle.capacity}</Text>
+        <Text className={`text-[15px] font-inter-bold ${isActive ? 'text-primary' : 'text-text'} mb-0.5`}>
+          {vehicle.name || vehicle.type}
+        </Text>
+        <Text className="text-[11px] font-inter-medium text-text-tertiary">
+          {vehicle.capacity}
+        </Text>
       </View>
-      <View className="items-end">
+      <View className="items-end mr-1">
         {isCalculating ? (
           <ActivityIndicator size="small" color={Colors.primary} />
         ) : (
-          <>
-            <Text className="text-base font-inter-bold text-text">₹{totalPrice}</Text>
-            <Text className="text-[9px] font-inter-bold text-primary uppercase mt-0.5 tracking-wider">₹{vehicle.perKmCharge}/km</Text>
-          </>
+          <View className="flex-row items-center">
+            <View className="items-end mr-3">
+              <Text className={`text-base font-inter-bold ${isActive ? 'text-primary' : 'text-text'}`}>
+                ₹{totalPrice}
+              </Text>
+              <Text className={`text-[9px] font-inter-bold uppercase mt-0.5 tracking-wider ${isActive ? 'text-primary' : 'text-text-tertiary'}`}>
+                ₹{vehicle.perKmCharge}/km
+              </Text>
+            </View>
+            <View className="w-5 h-5 items-center justify-center">
+              {isActive ? (
+                <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+              ) : (
+                <View className="w-4 h-4 rounded-full border border-gray-300" />
+              )}
+            </View>
+          </View>
         )}
       </View>
     </TouchableOpacity>

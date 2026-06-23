@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, Platform, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Platform, ActivityIndicator, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useBookings, type BookingData } from '@/contexts/BookingContext';
+import { getVehicleImageSource } from '@/lib/vehicles';
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   pending: { color: Colors.warning, label: 'Broadcasted' },
@@ -16,8 +17,8 @@ const statusConfig: Record<string, { color: string; label: string }> = {
 };
 
 const vehicleIcons: Record<string, any> = {
-  auto: 'rickshaw',
-  tempo: 'van-utility',
+  auto: 'auto-rickshaw',
+  tempo: 'truck-delivery',
   truck: 'truck',
 };
 
@@ -34,13 +35,19 @@ function AnimatedBookingCard({ booking, index }: { booking: BookingData; index: 
     ]).start();
   }, []);
 
+  const imgSource = getVehicleImageSource(undefined, booking.vehicleType);
+
   return (
     <Animated.View style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }] }}>
       <View className="bg-white rounded-2xl mb-4 p-4 border border-gray-50 shadow-xl shadow-black/5">
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center">
-            <View className="w-10 h-10 rounded-xl bg-gray-50 items-center justify-center mr-3.5 border border-gray-100">
-              <MaterialCommunityIcons name={vehicleIcons[booking.vehicleType] || 'truck'} size={22} color={Colors.text} />
+            <View className="w-12 h-12 rounded-xl bg-gray-50 items-center justify-center mr-3.5 border border-gray-100">
+              <Image
+                source={imgSource}
+                style={{ width: 36, height: 36 }}
+                resizeMode="contain"
+              />
             </View>
             <View>
               <Text className="text-sm font-inter-bold text-text uppercase tracking-tight">{booking.vehicleType}</Text>

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { io } from 'socket.io-client';
@@ -20,6 +21,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBookings, BookingData } from '@/contexts/BookingContext';
 import { getApiUrl } from '@/lib/query-client';
 import Colors from '@/constants/colors';
+import { getVehicleImageSource } from '@/lib/vehicles';
+import { useBookingSound } from '@/lib/useBookingSound';
 
 function getTimeAgo(dateString: string) {
   const diff = Date.now() - new Date(dateString).getTime();
@@ -139,7 +142,11 @@ function AnimatedRequestCard({
               {item.customerName || 'Customer'}
             </Text>
             <View className="flex-row items-center mt-0.5">
-              <MaterialCommunityIcons name={getVehicleIcon(item.vehicleType) as any} size={11} color={Colors.primary} />
+              <Image
+                source={getVehicleImageSource(undefined, item.vehicleType)}
+                style={{ width: 16, height: 16 }}
+                resizeMode="contain"
+              />
               <Text className="ml-1 text-[8px] font-inter-bold text-primary/60 uppercase">
                 {item.vehicleType}
               </Text>
@@ -251,24 +258,46 @@ export default function DriverRequestsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { fetchPendingBookings, acceptBooking } = useBookings();
+  const { fetchPendingBookings, acceptBooking, getActiveBooking } = useBookings();
   const [pendingBookings, setPendingBookings] = useState<BookingData[]>([]);
   const [loading, setLoading] = useState(true);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const prevCountRef = useRef<number>(-1);
+  const { playBookingAlert, stopBookingAlert } = useBookingSound();
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (!isFocused) {
+      stopBookingAlert();
+    }
+  }, [isFocused, stopBookingAlert]);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
 
   const loadPendingBookings = useCallback(async () => {
+    if (!isFocused || getActiveBooking()) {
+      setPendingBookings([]);
+      stopBookingAlert();
+      return;
+    }
     try {
       const result = await fetchPendingBookings();
+      const newCount = result.length;
+      // Play sound when NEW bookings arrive (count increases)
+      if (newCount === 0) {
+        stopBookingAlert();
+      } else if (newCount > prevCountRef.current && prevCountRef.current >= 0) {
+        playBookingAlert();
+      }
+      prevCountRef.current = newCount;
       setPendingBookings(result);
     } catch (e: any) {
       // Background silent poll
     } finally {
       setLoading(false);
     }
-  }, [fetchPendingBookings]);
+  }, [fetchPendingBookings, playBookingAlert, stopBookingAlert, getActiveBooking, isFocused]);
 
   useEffect(() => {
     loadPendingBookings();
@@ -278,7 +307,11 @@ export default function DriverRequestsScreen() {
     try {
       const apiUrl = getApiUrl();
       socket = io(apiUrl, { transports: ['websocket', 'polling'], path: '/socket.io' });
-      socket.on('booking:new', () => { loadPendingBookings(); });
+      socket.on('booking:new', () => {
+        if (!isFocused || getActiveBooking()) return;
+        playBookingAlert();
+        loadPendingBookings();
+      });
       socket.on('booking:updated', () => { loadPendingBookings(); });
     } catch (e) { }
 
@@ -290,6 +323,7 @@ export default function DriverRequestsScreen() {
 
   const handleAccept = async (bookingId: string) => {
     setAcceptingId(bookingId);
+    stopBookingAlert(); // Stop sound alert immediately when clicking Accept
     try {
       const result = await acceptBooking(bookingId);
       if (result.success) {
@@ -306,8 +340,8 @@ export default function DriverRequestsScreen() {
 
   const getVehicleIcon = (type: string) => {
     switch (type) {
-      case 'auto': return 'rickshaw';
-      case 'tempo': return 'van-utility';
+      case 'auto': return 'auto-rickshaw';
+      case 'tempo': return 'truck-delivery';
       case 'truck': return 'truck';
       default: return 'truck';
     }

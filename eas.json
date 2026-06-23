@@ -1,6 +1,6 @@
 {
     "cli": {
-        "appVersionSource": "remote"
+        "appVersionSource": "local"
     },
     "build": {
         "development": {
@@ -20,6 +20,26 @@
         "driver": {
             "android": {
                 "buildType": "app-bundle"
+            },
+            "env": {
+                "EXPO_PUBLIC_APP_MODE": "driver",
+                "EXPO_PUBLIC_DOMAIN": "https://api.myloadnimble.in",
+                "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAlxkoyPdQD4ehaXJ0dMXNXNLHcTzJHmYk"
+            }
+        },
+        "customer-apk": {
+            "android": {
+                "buildType": "apk"
+            },
+            "env": {
+                "EXPO_PUBLIC_APP_MODE": "customer",
+                "EXPO_PUBLIC_DOMAIN": "https://api.myloadnimble.in",
+                "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyAlxkoyPdQD4ehaXJ0dMXNXNLHcTzJHmYk"
+            }
+        },
+        "driver-apk": {
+            "android": {
+                "buildType": "apk"
             },
             "env": {
                 "EXPO_PUBLIC_APP_MODE": "driver",

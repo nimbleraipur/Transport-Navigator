@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, FlatList, StyleSheet, Platform, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, StyleSheet, Platform, ActivityIndicator, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useBookings, type BookingData } from '@/contexts/BookingContext';
+import { getVehicleImageSource } from '@/lib/vehicles';
 
 const statusConfig: Record<string, { color: string; label: string; icon: string }> = {
   pending: { color: Colors.warning, label: 'Finding Driver', icon: 'hourglass-outline' },
@@ -16,8 +17,8 @@ const statusConfig: Record<string, { color: string; label: string; icon: string 
 };
 
 const vehicleIcons: Record<string, any> = {
-  auto: 'rickshaw',
-  tempo: 'van-utility',
+  auto: 'auto-rickshaw',
+  tempo: 'truck-delivery',
   truck: 'truck',
 };
 
@@ -36,6 +37,8 @@ function AnimatedBookingCard({ booking, onPress, index }: { booking: BookingData
     ]).start();
   }, []);
 
+  const imgSource = getVehicleImageSource(undefined, booking.vehicleType);
+
   return (
     <Animated.View style={{ transform: [{ translateY: slideAnim }, { scale: scaleAnim }], opacity: opacityAnim }}>
       <TouchableOpacity
@@ -45,8 +48,12 @@ function AnimatedBookingCard({ booking, onPress, index }: { booking: BookingData
       >
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center">
-            <View className={`w-10 h-10 rounded-xl items-center justify-center mr-3.5 border border-gray-50 bg-gray-50/50`}>
-              <MaterialCommunityIcons name={vehicleIcons[booking.vehicleType] || 'truck'} size={22} color={Colors.text} />
+            <View className={`w-12 h-12 rounded-xl items-center justify-center mr-3.5 border border-gray-50 bg-gray-50/50`}>
+              <Image
+                source={imgSource}
+                style={{ width: 36, height: 36 }}
+                resizeMode="contain"
+              />
             </View>
             <View>
               <Text className="text-sm font-inter-bold text-text tracking-tight">{booking.vehicleType.toUpperCase()}</Text>

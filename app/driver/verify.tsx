@@ -144,17 +144,17 @@ export default function DriverVerifyScreen() {
     const isStepValid = (step: number) => {
         switch (step) {
             case 1:
-                return name.trim().length >= 3 && docs.profileSelfie !== null;
+                return name.trim().length >= 3 && !!docs.profileSelfie;
             case 2:
-                return aadharNumber.trim().length === 12 && docs.aadharPhoto !== null;
+                return aadharNumber.trim().length === 12 && !!docs.aadharPhoto;
             case 3:
                 // DL is optional. If they start typing it, we require the DL photo.
                 if (licenseNumber.trim().length > 0) {
-                    return docs.licensePhoto !== null;
+                    return !!docs.licensePhoto;
                 }
                 return true;
             case 4:
-                return rcNumber.trim().length >= 5 && docs.rcPhoto !== null && docs.vehiclePhoto !== null && docs.selfieWithVehicle !== null;
+                return rcNumber.trim().length >= 5 && !!docs.rcPhoto && !!docs.vehiclePhoto && !!docs.selfieWithVehicle;
             case 5:
                 // Bank info is optional
                 return true;
@@ -171,30 +171,40 @@ export default function DriverVerifyScreen() {
                 {
                     text: 'Camera',
                     onPress: async () => {
-                        const result = await ImagePicker.launchCameraAsync({
-                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                            allowsEditing: true,
-                            quality: 0.7,
-                        });
-                        if (!result.canceled) {
-                            const newDocs = { ...docs, [type]: result.assets[0].uri };
-                            setDocs(newDocs);
-                            saveDraft({ docs: newDocs });
+                        try {
+                            const result = await ImagePicker.launchCameraAsync({
+                                mediaTypes: ['images'],
+                                allowsEditing: true,
+                                quality: 0.7,
+                            });
+                            if (!result.canceled && result.assets && result.assets.length > 0) {
+                                const newDocs = { ...docs, [type]: result.assets[0].uri };
+                                setDocs(newDocs);
+                                saveDraft({ docs: newDocs });
+                            }
+                        } catch (e) {
+                            console.error('Error launching camera:', e);
+                            Alert.alert('Error', 'Failed to launch camera.');
                         }
                     },
                 },
                 {
                     text: 'Gallery',
                     onPress: async () => {
-                        const result = await ImagePicker.launchImageLibraryAsync({
-                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                            allowsEditing: true,
-                            quality: 0.7,
-                        });
-                        if (!result.canceled) {
-                            const newDocs = { ...docs, [type]: result.assets[0].uri };
-                            setDocs(newDocs);
-                            saveDraft({ docs: newDocs });
+                        try {
+                            const result = await ImagePicker.launchImageLibraryAsync({
+                                mediaTypes: ['images'],
+                                allowsEditing: true,
+                                quality: 0.7,
+                            });
+                            if (!result.canceled && result.assets && result.assets.length > 0) {
+                                const newDocs = { ...docs, [type]: result.assets[0].uri };
+                                setDocs(newDocs);
+                                saveDraft({ docs: newDocs });
+                            }
+                        } catch (e) {
+                            console.error('Error launching image library:', e);
+                            Alert.alert('Error', 'Failed to open photo library.');
                         }
                     },
                 },
@@ -369,7 +379,7 @@ export default function DriverVerifyScreen() {
                 keyboardShouldPersistTaps="handled"
             >
                 {user?.verificationStatus === 'rejected' && currentStep === 1 && (
-                    <View className="bg-red-50 p-4 rounded-xl border border-red-100 mb-6 animate-fade-in">
+                    <View className="bg-red-50 p-4 rounded-xl border border-red-100 mb-6">
                         <View className="flex-row items-center mb-1">
                             <Ionicons name="alert-circle" size={18} color={Colors.danger} />
                             <Text className="text-sm font-inter-bold text-danger ml-2">Verification Rejected</Text>
@@ -382,7 +392,7 @@ export default function DriverVerifyScreen() {
 
                 {/* Step 1: Driver Profile */}
                 {currentStep === 1 && (
-                    <View className="animate-fade-in">
+                    <View>
                         <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">Driver Profile</Text>
                         <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
                             <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Full Name</Text>
@@ -415,7 +425,7 @@ export default function DriverVerifyScreen() {
 
                 {/* Step 2: Aadhar Verification */}
                 {currentStep === 2 && (
-                    <View className="animate-fade-in">
+                    <View>
                         <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">Aadhar Verification</Text>
                         <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
                             <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Aadhar Card Number</Text>
@@ -451,7 +461,7 @@ export default function DriverVerifyScreen() {
 
                 {/* Step 3: Driving License */}
                 {currentStep === 3 && (
-                    <View className="animate-fade-in">
+                    <View>
                         <View className="flex-row items-center justify-between mb-3 px-1">
                             <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest">Driving License (Optional)</Text>
                             <View className="bg-gray-100 px-2 py-0.5 rounded-md">
@@ -492,7 +502,7 @@ export default function DriverVerifyScreen() {
 
                 {/* Step 4: Vehicle & RC Details */}
                 {currentStep === 4 && (
-                    <View className="animate-fade-in">
+                    <View>
                         <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">Vehicle & RC Details</Text>
                         <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
                             <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Vehicle RC Number</Text>
@@ -541,7 +551,7 @@ export default function DriverVerifyScreen() {
 
                 {/* Step 5: Payout Bank Settings */}
                 {currentStep === 5 && (
-                    <View className="animate-fade-in">
+                    <View>
                         <View className="flex-row items-center justify-between mb-3 px-1">
                             <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest">Payout Credentials (Optional)</Text>
                             <View className="bg-gray-100 px-2 py-0.5 rounded-md">

@@ -150,12 +150,15 @@ export default function DriverProfileScreen() {
   const pickQrCode = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.7,
       });
-      if (!result.canceled) uploadQrFile(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        uploadQrFile(result.assets[0].uri);
+      }
     } catch (e) {
+      console.error('Error picking QR code:', e);
       Alert.alert('Error', 'Could not open gallery');
     }
   };

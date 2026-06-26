@@ -108,15 +108,20 @@ export default function ProfileScreen() {
   };
 
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
 
-    if (!result.canceled) {
-      uploadProfilePhoto(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        uploadProfilePhoto(result.assets[0].uri);
+      }
+    } catch (e) {
+      console.error('Error picking profile image:', e);
+      Alert.alert('Error', 'Failed to pick image.');
     }
   };
 

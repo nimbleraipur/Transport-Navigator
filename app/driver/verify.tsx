@@ -172,6 +172,15 @@ export default function DriverVerifyScreen() {
                     text: 'Camera',
                     onPress: async () => {
                         try {
+                            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                            if (status !== 'granted') {
+                                Alert.alert(
+                                    'Permission Required',
+                                    'Camera access is needed to capture documents. Please allow camera access in your device settings.',
+                                    [{ text: 'OK' }]
+                                );
+                                return;
+                            }
                             const result = await ImagePicker.launchCameraAsync({
                                 mediaTypes: ['images'],
                                 allowsEditing: true,
@@ -192,6 +201,15 @@ export default function DriverVerifyScreen() {
                     text: 'Gallery',
                     onPress: async () => {
                         try {
+                            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                            if (status !== 'granted') {
+                                Alert.alert(
+                                    'Permission Required',
+                                    'Photo library access is needed to upload documents. Please allow photo access in your device settings.',
+                                    [{ text: 'OK' }]
+                                );
+                                return;
+                            }
                             const result = await ImagePicker.launchImageLibraryAsync({
                                 mediaTypes: ['images'],
                                 allowsEditing: true,

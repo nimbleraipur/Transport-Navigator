@@ -28,7 +28,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
     versionCode: 8,
-    permissions: ["CAMERA", "RECORD_AUDIO", "com.google.android.gms.permission.AD_ID"],
+    permissions: ["CAMERA", "READ_MEDIA_IMAGES", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "RECORD_AUDIO", "com.google.android.gms.permission.AD_ID"],
     softwareKeyboardLayoutMode: 'pan',
     adaptiveIcon: {
       backgroundColor: '#0A1628',
@@ -52,6 +52,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     'expo-font',
     'expo-web-browser',
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'Allow $(PRODUCT_NAME) to access your photos to upload documents.',
+        cameraPermission: 'Allow $(PRODUCT_NAME) to use the camera to capture documents.',
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

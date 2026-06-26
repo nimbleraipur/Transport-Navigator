@@ -1,0 +1,150 @@
+diff --git a/node_modules/react-native-css-interop/.cache/android.js b/node_modules/react-native-css-interop/.cache/android.js
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/react-native-css-interop/.cache/ios.js b/node_modules/react-native-css-interop/.cache/ios.js
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/react-native-css-interop/.cache/macos.js b/node_modules/react-native-css-interop/.cache/macos.js
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/react-native-css-interop/.cache/native.js b/node_modules/react-native-css-interop/.cache/native.js
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/react-native-css-interop/.cache/windows.js b/node_modules/react-native-css-interop/.cache/windows.js
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/react-native-css-interop/dist/runtime/native/render-component.js b/node_modules/react-native-css-interop/dist/runtime/native/render-component.js
+index eba25ec..755583a 100644
+--- a/node_modules/react-native-css-interop/dist/runtime/native/render-component.js
++++ b/node_modules/react-native-css-interop/dist/runtime/native/render-component.js
+@@ -122,21 +122,40 @@ function printUpgradeWarning(warning, originalProps) {
+ }
+ function stringify(object) {
+     const seen = new WeakSet();
+-    return JSON.stringify(object, function replace(_, value) {
+-        if (!(value !== null && typeof value === "object")) {
+-            return value;
+-        }
+-        if (seen.has(value)) {
+-            return "[Circular]";
+-        }
+-        seen.add(value);
+-        const newValue = Array.isArray(value) ? [] : {};
+-        for (const entry of Object.entries(value)) {
+-            newValue[entry[0]] = replace(entry[0], entry[1]);
+-        }
+-        seen.delete(value);
+-        return newValue;
+-    }, 2);
++    try {
++        return JSON.stringify(object, function replace(key, value) {
++            if (!(value !== null && typeof value === "object")) {
++                return value;
++            }
++            if (seen.has(value)) {
++                return "[Circular]";
++            }
++            seen.add(value);
++            const newValue = Array.isArray(value) ? [] : {};
++            let keys = [];
++            try {
++                keys = Object.keys(value);
++            } catch (e) {
++                return "[Unserializable]";
++            }
++            for (const k of keys) {
++                try {
++                    const desc = Object.getOwnPropertyDescriptor(value, k);
++                    if (desc && desc.get) {
++                        newValue[k] = "[Getter]";
++                    } else {
++                        newValue[k] = replace(k, value[k]);
++                    }
++                } catch (e) {
++                    newValue[k] = "[Error]";
++                }
++            }
++            seen.delete(value);
++            return newValue;
++        }, 2);
++    } catch (e) {
++        return "[Serialization Failed]";
++    }
+ }
+ function getDebugReplacer() {
+     const seen = new WeakSet();
+diff --git a/node_modules/react-native-css-interop/src/runtime/native/render-component.tsx b/node_modules/react-native-css-interop/src/runtime/native/render-component.tsx
+index cfb9a9e..8ae5c57 100644
+--- a/node_modules/react-native-css-interop/src/runtime/native/render-component.tsx
++++ b/node_modules/react-native-css-interop/src/runtime/native/render-component.tsx
+@@ -236,31 +236,51 @@ function printUpgradeWarning(
+ 
+ function stringify(object: any) {
+   const seen = new WeakSet();
+-  return JSON.stringify(
+-    object,
+-    function replace(_, value) {
+-      if (!(value !== null && typeof value === "object")) {
+-        return value;
+-      }
++  try {
++    return JSON.stringify(
++      object,
++      function replace(key, value) {
++        if (!(value !== null && typeof value === "object")) {
++          return value;
++        }
+ 
+-      if (seen.has(value)) {
+-        return "[Circular]";
+-      }
++        if (seen.has(value)) {
++          return "[Circular]";
++        }
+ 
+-      seen.add(value);
++        seen.add(value);
+ 
+-      const newValue: any = Array.isArray(value) ? [] : {};
++        const newValue: any = Array.isArray(value) ? [] : {};
+ 
+-      for (const entry of Object.entries(value)) {
+-        newValue[entry[0]] = replace(entry[0], entry[1]);
+-      }
++        let keys: string[] = [];
++        try {
++          keys = Object.keys(value);
++        } catch (e) {
++          return "[Unserializable]";
++        }
++
++        for (const k of keys) {
++          try {
++            const desc = Object.getOwnPropertyDescriptor(value, k);
++            if (desc && desc.get) {
++              newValue[k] = "[Getter]";
++            } else {
++              newValue[k] = replace(k, value[k]);
++            }
++          } catch (e) {
++            newValue[k] = "[Error]";
++          }
++        }
+ 
+-      seen.delete(value);
++        seen.delete(value);
+ 
+-      return newValue;
+-    },
+-    2,
+-  );
++        return newValue;
++      },
++      2,
++    );
++  } catch (e) {
++    return "[Serialization Failed]";
++  }
+ }
+ 
+ // const ForwardRefSymbol = Symbol.for("react.forward_ref");

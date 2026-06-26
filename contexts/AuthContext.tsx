@@ -93,7 +93,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      const data = await res.json();
+      
+      let data: any = {};
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        return { 
+          success: false, 
+          error: `Server error (${res.status}): ${text || res.statusText || 'Unexpected non-JSON response'}` 
+        };
+      }
 
       // Auto-logout if unauthorized (deleted account or invalid/expired token)
       if (res.status === 401) {
@@ -209,10 +220,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const data = await res.json();
-      if (data.user) {
-        setUser(data.user);
-        await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+          await AsyncStorage.setItem('auth_user', JSON.stringify(data.user));
+        }
+      } else {
+        const text = await res.text();
+        console.warn(`[AUTH] Failed to refresh user (${res.status}):`, text || res.statusText);
       }
     } catch (e) {
       console.error('Failed to refresh user:', e);

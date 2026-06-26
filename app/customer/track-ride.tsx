@@ -124,10 +124,11 @@ export default function TrackRideScreen() {
   const router = useRouter();
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const insets = useSafeAreaInsets();
-  const { fetchBookings, cancelBooking, getBookingById } = useBookings();
+  const { fetchBookings, cancelBooking, getBookingById, increasePrice } = useBookings();
   const { addNotification } = useNotifications();
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [updatingPrice, setUpdatingPrice] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const hasNavigated = useRef(false);
@@ -231,6 +232,23 @@ export default function TrackRideScreen() {
     router.replace('/customer/home' as any);
   }, [bookingId]);
 
+  const handleIncreasePrice = async (increment: number) => {
+    if (!bookingId || updatingPrice) return;
+    setUpdatingPrice(true);
+    try {
+      const result = await increasePrice(bookingId as string, increment);
+      if (result.success) {
+        Alert.alert('Fare Updated! 💰', `You increased the offer price. Notifying drivers again.`);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to update fare.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Connection failed. Please try again.');
+    } finally {
+      setUpdatingPrice(false);
+    }
+  };
+
   const handleFinishRide = () => {
     setShowPaymentModal(false);
     router.replace(`/customer/rate-ride?bookingId=${displayBooking.id}` as any);
@@ -291,10 +309,29 @@ export default function TrackRideScreen() {
             </View>
           </View>
 
-          {/* Price row */}
-          <View className="mt-3 flex-row items-center justify-between bg-primary/5 rounded-2xl px-5 py-3 border border-primary/10">
-            <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-wider">Estimated Fare</Text>
-            <Text className="text-xl font-inter-black text-primary">₹{displayBooking.totalPrice}</Text>
+          {/* Price row with Increments */}
+          <View className="mt-3 bg-primary/5 rounded-2xl p-5 border border-primary/10">
+            <View className="flex-row items-center justify-between mb-3.5">
+              <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-wider">Offer Fare</Text>
+              <Text className="text-xl font-inter-black text-primary">₹{displayBooking.totalPrice}</Text>
+            </View>
+
+            <Text className="text-[10px] font-inter-medium text-text-tertiary text-center mb-3">
+              No driver accepting? Increase fare to get accepted faster:
+            </Text>
+
+            <View className="flex-row justify-between" style={{ gap: 8 }}>
+              {[50, 100, 200].map((amt) => (
+                <TouchableOpacity
+                  key={amt}
+                  onPress={() => handleIncreasePrice(amt)}
+                  disabled={updatingPrice}
+                  className="flex-1 bg-white border border-primary/20 py-2.5 rounded-xl items-center shadow-sm active:bg-gray-50"
+                >
+                  <Text className="text-xs font-inter-bold text-primary">+ ₹{amt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Cancel button */}

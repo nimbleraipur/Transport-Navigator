@@ -1,28 +1,25 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import Constants from 'expo-constants';
 import { useAuth } from '@/contexts/AuthContext';
-
-const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+import { getApiUrl } from '@/lib/query-client';
 
 let Notifications: any = null;
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-    // Configure how notifications are handled when the app is foregrounded
-    Notifications?.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
-  } catch (error) {
-    console.warn('Expo Notifications module failed to load:', error);
-  }
+try {
+  Notifications = require('expo-notifications');
+  // Configure how notifications are handled when the app is foregrounded
+  Notifications?.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+} catch (error) {
+  console.warn('Expo Notifications module failed to load:', error);
 }
 
 export interface NotificationItem {
@@ -48,13 +45,13 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 const STORAGE_KEY = 'tg_notifications';
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
     registerForPushNotificationsAsync();
     loadNotifications();
-  }, [user?.id]);
+  }, [user?.id, token]);
 
   async function registerForPushNotificationsAsync() {
     if (Platform.OS === 'web' || !Notifications) return;
@@ -73,6 +70,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId || "b59bcbe1-1876-4a8a-a87e-6684317f62b4";
+      const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
+      const pushToken = tokenResult.data;
+      console.log('[PUSH-TOKEN] Acquired Expo Push Token:', pushToken);
+
+      if (pushToken && token) {
+        const baseUrl = getApiUrl();
+        const res = await fetch(new URL('/api/users/profile', baseUrl).toString(), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ pushToken })
+        });
+        if (res.ok) {
+          console.log('[PUSH-TOKEN] Registered push token on backend successfully');
+        } else {
+          console.error('[PUSH-TOKEN] Failed to register push token on backend:', res.status);
+        }
+      }
+
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
@@ -82,7 +101,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         });
       }
     } catch (e) {
-      console.warn('Notification permission error', e);
+      console.warn('Notification permission or token registration error', e);
     }
   }
 

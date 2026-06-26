@@ -56,7 +56,7 @@ interface BookingContextValue {
   vehicles: VehicleOption[];
   loading: boolean;
   fetchBookings: () => Promise<void>;
-  fetchVehicles: () => Promise<void>;
+  fetchVehicles: (cityId?: string) => Promise<void>;
   fetchPendingBookings: () => Promise<BookingData[]>;
   createBooking: (data: { pickup: any; delivery: any; vehicleType: string; totalPrice: number; distance: number; paymentMethod?: string }) => Promise<{ success: boolean; booking?: BookingData; error?: string }>;
   acceptBooking: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
@@ -65,9 +65,10 @@ interface BookingContextValue {
   cancelBooking: (bookingId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   rateBooking: (bookingId: string, rating: number, comment?: string) => Promise<{ success: boolean; error?: string }>;
   confirmPayment: (bookingId: string) => Promise<{ success: boolean; error?: string }>;
+  increasePrice: (bookingId: string, increment: number) => Promise<{ success: boolean; booking?: BookingData; error?: string }>;
   getBookingById: (id: string) => BookingData | undefined;
   getActiveBooking: () => BookingData | undefined;
-  checkOperationalAvailability: (lat: number, lng: number) => Promise<{ name?: string, error?: string }>;
+  checkOperationalAvailability: (lat: number, lng: number) => Promise<{ id?: string, name?: string, error?: string }>;
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null);
@@ -88,7 +89,14 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         method, headers,
         body: body ? JSON.stringify(body) : undefined,
       });
-      return await res.json();
+      
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await res.json();
+      } else {
+        const text = await res.text();
+        return { error: `Server error (${res.status}): ${text || res.statusText || 'Unexpected non-JSON response'}` };
+      }
     } catch (e: any) {
       return { error: e.message || 'Network error' };
     }
@@ -175,6 +183,15 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return { success: false, error: data.error };
   }, [apiCall]);
 
+  const increasePrice = useCallback(async (bookingId: string, increment: number) => {
+    const data = await apiCall(`/api/bookings/${bookingId}/increase-price`, 'PUT', { increment });
+    if (data.success && data.booking) {
+      setBookings(prev => prev.map(b => b.id === bookingId ? data.booking : b));
+      return { success: true, booking: data.booking };
+    }
+    return { success: false, error: data.error };
+  }, [apiCall]);
+
   const getBookingById = useCallback((id: string) => bookings.find(b => b.id === id), [bookings]);
 
   const getActiveBooking = useCallback(() =>
@@ -186,8 +203,9 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return data;
   }, [apiCall]);
 
-  const fetchVehicles = useCallback(async () => {
-    const data = await apiCall('/api/vehicles');
+  const fetchVehicles = useCallback(async (cityId?: string) => {
+    const url = cityId ? `/api/vehicles?cityId=${cityId}` : '/api/vehicles';
+    const data = await apiCall(url);
     if (data.vehicles) {
       setVehicles(data.vehicles);
     }
@@ -195,9 +213,9 @@ export function BookingProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     bookings, vehicles, loading, fetchBookings, fetchVehicles, fetchPendingBookings, createBooking,
-    acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, confirmPayment,
+    acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, confirmPayment, increasePrice,
     getBookingById, getActiveBooking, checkOperationalAvailability,
-  }), [bookings, vehicles, loading, fetchBookings, fetchVehicles, fetchPendingBookings, createBooking, acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, confirmPayment, getBookingById, getActiveBooking, checkOperationalAvailability]);
+  }), [bookings, vehicles, loading, fetchBookings, fetchVehicles, fetchPendingBookings, createBooking, acceptBooking, startTrip, completeTrip, cancelBooking, rateBooking, confirmPayment, increasePrice, getBookingById, getActiveBooking, checkOperationalAvailability]);
 
   return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>;
 }

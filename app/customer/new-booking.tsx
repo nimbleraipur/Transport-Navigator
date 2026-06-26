@@ -24,6 +24,7 @@ import { useBookings } from '@/contexts/BookingContext';
 import Colors from '@/constants/colors';
 import LocationPickerMap from '@/components/LocationPickerMap';
 import { getVehicleImageSource } from '@/lib/vehicles';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { MOCK_LOCATIONS, BILASPUR_REGION } from '@/lib/locations';
 
@@ -66,11 +67,13 @@ function LocationSearchItem({
   type,
   onPress,
   index,
+  isRecent,
 }: {
   loc: MapLocation;
   type: 'pickup' | 'delivery';
   onPress: () => void;
   index: number;
+  isRecent?: boolean;
 }) {
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -85,11 +88,11 @@ function LocationSearchItem({
         onPress={onPress}
         activeOpacity={0.7}
       >
-        <View className={`w-9 h-9 rounded-lg items-center justify-center mr-3 ${type === 'pickup' ? 'bg-success/5' : 'bg-danger/5'}`}>
+        <View className={`w-9 h-9 rounded-lg items-center justify-center mr-3 ${isRecent ? 'bg-gray-100' : type === 'pickup' ? 'bg-success/5' : 'bg-danger/5'}`}>
           <Ionicons
-            name={type === 'pickup' ? 'location' : 'flag'}
+            name={isRecent ? 'time-outline' : type === 'pickup' ? 'location' : 'flag'}
             size={16}
-            color={type === 'pickup' ? Colors.success : Colors.danger}
+            color={isRecent ? Colors.textTertiary : type === 'pickup' ? Colors.success : Colors.danger}
           />
         </View>
         <View className="flex-1">
@@ -177,7 +180,7 @@ export default function NewBookingScreen() {
   const [deliverySearch, setDeliverySearch] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const { vehicles, fetchVehicles } = useBookings();
+  const { vehicles, fetchVehicles, checkOperationalAvailability } = useBookings();
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [isPickingFromMap, setIsPickingFromMap] = useState(false);
@@ -191,17 +194,83 @@ export default function NewBookingScreen() {
   const modalScale = useRef(new Animated.Value(0)).current;
   const modalOpacity = useRef(new Animated.Value(0)).current;
 
+  const [recentLocations, setRecentLocations] = useState<MapLocation[]>([]);
+
+  // Load recent locations from AsyncStorage on mount
+  useEffect(() => {
+    const loadRecentLocations = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('recent_locations');
+        if (stored) {
+          setRecentLocations(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error('Error loading recent locations:', e);
+      }
+    };
+    loadRecentLocations();
+  }, []);
+
+  const saveRecentLocation = async (loc: MapLocation) => {
+    try {
+      if (!loc.lat || !loc.lng || !loc.name) return;
+
+      // Filter out duplicates
+      const cleaned = recentLocations.filter(
+        (r) => 
+          r.name.toLowerCase() !== loc.name.toLowerCase() && 
+          !(Math.abs(r.lat - loc.lat) < 0.0001 && Math.abs(r.lng - loc.lng) < 0.0001)
+      );
+
+      const updated = [loc, ...cleaned].slice(0, 5);
+      setRecentLocations(updated);
+      await AsyncStorage.setItem('recent_locations', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Error saving recent location:', e);
+    }
+  };
+
+  const clearRecentLocations = async () => {
+    try {
+      setRecentLocations([]);
+      await AsyncStorage.removeItem('recent_locations');
+    } catch (e) {
+      console.error('Error clearing recent locations:', e);
+    }
+  };
+
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
   const bothSelected = pickup !== null && delivery !== null;
 
   useEffect(() => {
-    fetchVehicles();
-  }, []);
+    if (pickup && pickup.lat && pickup.lng) {
+      const resolveCityAndFetchVehicles = async () => {
+        try {
+          const cityRes = await checkOperationalAvailability(pickup.lat, pickup.lng);
+          if (cityRes && cityRes.id) {
+            console.log('[BOOKING-UI] Found operational city:', cityRes.name, 'ID:', cityRes.id);
+            fetchVehicles(cityRes.id);
+          } else {
+            fetchVehicles();
+          }
+        } catch (e) {
+          console.error('[BOOKING-UI] Error checking city availability:', e);
+          fetchVehicles();
+        }
+      };
+      resolveCityAndFetchVehicles();
+    } else {
+      fetchVehicles();
+    }
+  }, [pickup, fetchVehicles, checkOperationalAvailability]);
 
   useEffect(() => {
-    if (vehicles.length > 0 && !selectedVehicle) {
-      setSelectedVehicle(vehicles[0]);
+    if (vehicles.length > 0) {
+      const matched = selectedVehicle ? vehicles.find(v => v.type === selectedVehicle.type) : null;
+      setSelectedVehicle(matched || vehicles[0]);
+    } else {
+      setSelectedVehicle(null);
     }
   }, [vehicles]);
 
@@ -435,6 +504,8 @@ export default function NewBookingScreen() {
                         setDeliverySearch(finalLoc.name);
                       }
 
+                      saveRecentLocation(finalLoc);
+
                       setActiveField(null);
                       setIsPickingFromMap(false);
                       setTempLocation(null);
@@ -587,10 +658,19 @@ export default function NewBookingScreen() {
       {activeField && !isPickingFromMap && (
         <View className="absolute top-[260px] left-0 right-0 bottom-0 bg-white z-20 rounded-t-3xl shadow-xl">
           <View className="px-5 pt-4 pb-2">
-            <View className="flex-row items-center mb-4 px-1">
-              <View className="h-[1px] flex-1 bg-gray-100" />
-              <Text className="mx-4 text-[9px] font-inter-bold text-text-tertiary uppercase tracking-widest">Suggestions</Text>
-              <View className="h-[1px] flex-1 bg-gray-100" />
+            <View className="flex-row items-center justify-between mb-4 px-1">
+              <View className="flex-row items-center flex-1">
+                <View className="h-[1px] flex-1 bg-gray-100" />
+                <Text className="mx-4 text-[9px] font-inter-bold text-text-tertiary uppercase tracking-widest">
+                  {(pickupSearch.length < 3 && deliverySearch.length < 3 && recentLocations.length > 0) ? 'Recent Searches' : 'Suggestions'}
+                </Text>
+                <View className="h-[1px] flex-1 bg-gray-100" />
+              </View>
+              {(pickupSearch.length < 3 && deliverySearch.length < 3 && recentLocations.length > 0) && (
+                <TouchableOpacity onPress={clearRecentLocations} className="ml-2 px-2 py-1 bg-gray-50 rounded-lg border border-gray-100">
+                  <Text className="text-[9px] font-inter-bold text-danger uppercase tracking-wider">Clear</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -598,13 +678,37 @@ export default function NewBookingScreen() {
             {isSearching ? (
               <ActivityIndicator className="mt-10" color={Colors.primary} />
             ) : (pickupSearch.length < 3 && deliverySearch.length < 3) ? (
-              <View className="items-center py-10 opacity-60 px-6">
-                <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.primary + '40'} />
-                <Text className="text-sm font-inter-bold text-text mt-4">Search for an address</Text>
-                <Text className="text-[11px] font-inter-medium text-text-tertiary text-center mt-2 leading-4">
-                  Type at least 3 characters to see suggestions or use the "Set on Map" option above.
-                </Text>
-              </View>
+              recentLocations.length > 0 ? (
+                recentLocations.map((loc, i) => (
+                  <LocationSearchItem
+                    key={loc.id}
+                    loc={loc}
+                    type={activeField || 'pickup'}
+                    index={i}
+                    isRecent={true}
+                    onPress={() => {
+                      if (activeField === 'pickup') {
+                        setPickup(loc);
+                        setPickupSearch(loc.name);
+                      } else {
+                        setDelivery(loc);
+                        setDeliverySearch(loc.name);
+                      }
+                      saveRecentLocation(loc);
+                      setActiveField(null);
+                      Keyboard.dismiss();
+                    }}
+                  />
+                ))
+              ) : (
+                <View className="items-center py-10 opacity-60 px-6">
+                  <MaterialCommunityIcons name="map-marker-radius" size={40} color={Colors.primary + '40'} />
+                  <Text className="text-sm font-inter-bold text-text mt-4">Search for an address</Text>
+                  <Text className="text-[11px] font-inter-medium text-text-tertiary text-center mt-2 leading-4">
+                    Type at least 3 characters to see suggestions or use the &quot;Set on Map&quot; option above.
+                  </Text>
+                </View>
+              )
             ) : searchResults.length === 0 ? (
               <View className="items-center py-10 opacity-40 px-6">
                 <Ionicons name="search-outline" size={32} color={Colors.divider} />
@@ -613,7 +717,7 @@ export default function NewBookingScreen() {
               </View>
             ) : (
               searchResults.map((loc, i) => (
-                <LocationSearchItem key={loc.id} loc={loc} type={activeField} index={i} onPress={async () => {
+                <LocationSearchItem key={loc.id} loc={loc} type={activeField || 'pickup'} index={i} onPress={async () => {
                   let finalLoc = loc;
                   if (loc.place_id) {
                     setIsSearching(true);
@@ -645,6 +749,9 @@ export default function NewBookingScreen() {
 
                   if (activeField === 'pickup') { setPickup(finalLoc); setPickupSearch(finalLoc.name); }
                   else { setDelivery(finalLoc); setDeliverySearch(finalLoc.name); }
+                  
+                  saveRecentLocation(finalLoc);
+                  
                   setActiveField(null);
                   Keyboard.dismiss();
                 }}

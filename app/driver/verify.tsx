@@ -8,12 +8,11 @@ import {
     Image,
     Alert,
     ActivityIndicator,
-    Platform,
     StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,27 +32,27 @@ interface DocItemProps {
 
 function DocItem({ label, type, image, onPick, icon }: DocItemProps) {
     return (
-        <View className="mb-6">
-            <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">{label}</Text>
+        <View style={styles.docItemContainer}>
+            <Text style={styles.docItemLabel}>{label}</Text>
             <TouchableOpacity
                 onPress={() => onPick(type)}
                 activeOpacity={0.7}
-                className="w-full aspect-[16/9] rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 overflow-hidden items-center justify-center"
+                style={styles.docItemBox}
             >
                 {image ? (
                     <>
-                        <Image source={{ uri: image }} className="w-full h-full" resizeMode="cover" />
-                        <View className="absolute top-3 right-3 bg-white/90 rounded-full p-2 shadow-sm">
+                        <Image source={{ uri: image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                        <View style={styles.docItemEditOverlay}>
                             <Ionicons name="camera" size={16} color={Colors.primary} />
                         </View>
                     </>
                 ) : (
-                    <View className="items-center">
-                        <View className="w-12 h-12 rounded-full bg-white items-center justify-center mb-2 shadow-sm">
+                    <View style={styles.docItemEmpty}>
+                        <View style={styles.docItemIconBg}>
                             <MaterialCommunityIcons name={icon as any} size={24} color={Colors.primary} />
                         </View>
-                        <Text className="text-xs font-inter-bold text-primary">Upload Photo</Text>
-                        <Text className="text-[10px] font-inter-medium text-text-tertiary mt-1">Tap to capture or select</Text>
+                        <Text style={styles.docItemUploadText}>Upload Photo</Text>
+                        <Text style={styles.docItemSubText}>Tap to capture or select</Text>
                     </View>
                 )}
             </TouchableOpacity>
@@ -79,13 +78,13 @@ export default function DriverVerifyScreen() {
         vehiclePhoto: null,
         selfieWithVehicle: null,
     });
-    
+
     // Optional Bank Details
     const [accountHolderName, setAccountHolderName] = useState('');
     const [accountNumber, setAccountNumber] = useState('');
     const [ifscCode, setIfscCode] = useState('');
     const [upiId, setUpiId] = useState('');
-    
+
     const [loading, setLoading] = useState(false);
 
     // Load draft on mount
@@ -120,9 +119,6 @@ export default function DriverVerifyScreen() {
     // Save draft helper
     const saveDraft = async (updates: any) => {
         try {
-            const stored = await AsyncStorage.getItem('driver_verify_draft');
-            const currentDraft = stored ? JSON.parse(stored) : {};
-            
             const newDraft = {
                 name: updates.hasOwnProperty('name') ? updates.name : name,
                 aadharNumber: updates.hasOwnProperty('aadharNumber') ? updates.aadharNumber : aadharNumber,
@@ -148,7 +144,6 @@ export default function DriverVerifyScreen() {
             case 2:
                 return aadharNumber.trim().length === 12 && !!docs.aadharPhoto;
             case 3:
-                // DL is optional. If they start typing it, we require the DL photo.
                 if (licenseNumber.trim().length > 0) {
                     return !!docs.licensePhoto;
                 }
@@ -156,7 +151,6 @@ export default function DriverVerifyScreen() {
             case 4:
                 return rcNumber.trim().length >= 5 && !!docs.rcPhoto && !!docs.vehiclePhoto && !!docs.selfieWithVehicle;
             case 5:
-                // Bank info is optional
                 return true;
             default:
                 return false;
@@ -174,11 +168,7 @@ export default function DriverVerifyScreen() {
                         try {
                             const { status } = await ImagePicker.requestCameraPermissionsAsync();
                             if (status !== 'granted') {
-                                Alert.alert(
-                                    'Permission Required',
-                                    'Camera access is needed to capture documents. Please allow camera access in your device settings.',
-                                    [{ text: 'OK' }]
-                                );
+                                Alert.alert('Permission Required', 'Camera access is needed to capture documents. Please allow camera access in your device settings.', [{ text: 'OK' }]);
                                 return;
                             }
                             const result = await ImagePicker.launchCameraAsync({
@@ -203,11 +193,7 @@ export default function DriverVerifyScreen() {
                         try {
                             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                             if (status !== 'granted') {
-                                Alert.alert(
-                                    'Permission Required',
-                                    'Photo library access is needed to upload documents. Please allow photo access in your device settings.',
-                                    [{ text: 'OK' }]
-                                );
+                                Alert.alert('Permission Required', 'Photo library access is needed to upload documents. Please allow photo access in your device settings.', [{ text: 'OK' }]);
                                 return;
                             }
                             const result = await ImagePicker.launchImageLibraryAsync({
@@ -241,14 +227,12 @@ export default function DriverVerifyScreen() {
         if (!rcNumber) {
             return Alert.alert('Invalid Data', 'Please enter your Vehicle RC number.');
         }
-
-        // License photo only checked if DL number was filled
         if (licenseNumber.trim().length > 0 && !docs.licensePhoto) {
             return Alert.alert('Missing Documents', 'Please upload your Driving License photo.');
         }
 
         const missingRequired = Object.entries(docs).filter(([key, val]) => {
-            if (key === 'licensePhoto') return false; // Optional
+            if (key === 'licensePhoto') return false;
             return !val;
         });
 
@@ -264,13 +248,11 @@ export default function DriverVerifyScreen() {
             formData.append('rcNumber', rcNumber);
             formData.append('licenseNumber', licenseNumber || '');
 
-            // Append optional bank details
             if (accountHolderName) formData.append('accountHolderName', accountHolderName);
             if (accountNumber) formData.append('accountNumber', accountNumber);
             if (ifscCode) formData.append('ifscCode', ifscCode.toUpperCase());
             if (upiId) formData.append('upiId', upiId.toLowerCase());
 
-            // Append files
             Object.entries(docs).forEach(([key, uri]) => {
                 if (uri) {
                     const filename = uri.split('/').pop() || 'photo.jpg';
@@ -313,68 +295,60 @@ export default function DriverVerifyScreen() {
         { label: 'Payout', icon: 'bank' }
     ];
 
+    const stepValid = isStepValid(currentStep);
+    const progressWidth = ((currentStep - 1) / 4) * 100;
+
     return (
-        <View className="flex-1 bg-white">
+        <View style={styles.container}>
+            {/* Header */}
             <LinearGradient
-                colors={[Colors.navyDark, Colors.navyMid]}
-                style={{ paddingTop: insets.top + 20, paddingBottom: 25, paddingHorizontal: 24 }}
-                className="rounded-b-[32px] shadow-lg"
+                colors={['#000000', '#333333']}
+                style={[styles.header, { paddingTop: insets.top + 20 }]}
             >
-                <TouchableOpacity
-                    onPress={() => logout()}
-                    className="absolute top-10 right-6 z-10 p-2"
-                >
+                <TouchableOpacity onPress={() => logout()} style={styles.logoutBtn}>
                     <Ionicons name="log-out-outline" size={24} color="#FFF" />
                 </TouchableOpacity>
-                <Text className="text-2xl font-inter-bold text-surface">Driver Verification</Text>
-                <Text className="text-surface/60 font-inter-medium mt-1">Submit documents to start working</Text>
+                <Text style={styles.headerTitle}>Driver Verification</Text>
+                <Text style={styles.headerSubtitle}>Submit documents to start working</Text>
             </LinearGradient>
 
-            {/* Stepper Progress Bar */}
-            <View className="px-6 py-4 bg-gray-50/50 border-b border-gray-100">
-                <View className="flex-row justify-between items-center relative">
-                    <View className="absolute left-6 right-6 top-5 h-[2px] bg-gray-200" />
-                    <View 
-                        className="absolute left-6 top-5 h-[2px] bg-primary" 
-                        style={{ width: `${((currentStep - 1) / 4) * 100}%` }}
-                    />
-                    
+            {/* Stepper */}
+            <View style={styles.stepperContainer}>
+                <View style={styles.stepperRow}>
+                    {/* background track */}
+                    <View style={styles.stepperTrackBg} />
+                    {/* filled progress */}
+                    <View style={[styles.stepperTrackFill, { width: `${progressWidth}%` as any }]} />
+
                     {stepsConfig.map((step, idx) => {
                         const stepNum = idx + 1;
                         const isCompleted = currentStep > stepNum;
                         const isActive = currentStep === stepNum;
-                        
+
                         return (
-                            <View key={step.label} className="items-center z-10 flex-1">
-                                <TouchableOpacity 
+                            <View key={step.label} style={styles.stepItemContainer}>
+                                <TouchableOpacity
                                     disabled={stepNum > currentStep && !isStepValid(stepNum - 1)}
                                     onPress={() => {
                                         setCurrentStep(stepNum);
                                         saveDraft({ currentStep: stepNum });
                                     }}
-                                    className={`w-10 h-10 rounded-full items-center justify-center border-2 ${
-                                        isCompleted 
-                                            ? 'bg-primary border-primary' 
-                                            : isActive 
-                                                ? 'bg-white border-primary shadow-sm' 
-                                                : 'bg-white border-gray-200'
-                                    }`}
+                                    style={[
+                                        styles.stepCircle,
+                                        isCompleted ? styles.stepCircleCompleted : isActive ? styles.stepCircleActive : styles.stepCircleInactive
+                                    ]}
                                 >
                                     {isCompleted ? (
                                         <Ionicons name="checkmark" size={16} color="white" />
                                     ) : (
-                                        <MaterialCommunityIcons 
-                                            name={step.icon as any} 
-                                            size={16} 
-                                            color={isActive ? Colors.primary : '#9CA3AF'} 
+                                        <MaterialCommunityIcons
+                                            name={step.icon as any}
+                                            size={16}
+                                            color={isActive ? Colors.primary : '#9CA3AF'}
                                         />
                                     )}
                                 </TouchableOpacity>
-                                <Text 
-                                    className={`text-[8px] font-inter-bold uppercase tracking-wider mt-1.5 ${
-                                        isActive ? 'text-primary' : 'text-text-tertiary'
-                                    }`}
-                                >
+                                <Text style={[styles.stepLabel, isActive ? styles.stepLabelActive : styles.stepLabelInactive]}>
                                     {step.label}
                                 </Text>
                             </View>
@@ -384,69 +358,54 @@ export default function DriverVerifyScreen() {
             </View>
 
             <ScrollView
-                className="flex-1 w-full"
-                contentContainerStyle={{ 
-                    paddingTop: 24, 
-                    paddingBottom: insets.bottom + 40,
-                    maxWidth: 500,
-                    alignSelf: 'center',
-                    width: '100%',
-                    paddingHorizontal: 24
-                }}
+                style={styles.scroll}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
+                {/* Rejection Banner */}
                 {user?.verificationStatus === 'rejected' && currentStep === 1 && (
-                    <View className="bg-red-50 p-4 rounded-xl border border-red-100 mb-6">
-                        <View className="flex-row items-center mb-1">
-                            <Ionicons name="alert-circle" size={18} color={Colors.danger} />
-                            <Text className="text-sm font-inter-bold text-danger ml-2">Verification Rejected</Text>
+                    <View style={styles.rejectionBanner}>
+                        <View style={styles.rejectionRow}>
+                            <Ionicons name="alert-circle" size={18} color="#EF4444" />
+                            <Text style={styles.rejectionTitle}>Verification Rejected</Text>
                         </View>
-                        <Text className="text-xs font-inter-medium text-danger/70 leading-5">
+                        <Text style={styles.rejectionReason}>
                             Reason: {user.rejectionReason || 'Documents were invalid or unclear. Please re-submit.'}
                         </Text>
                     </View>
                 )}
 
-                {/* Step 1: Driver Profile */}
+                {/* ─── Step 1: Profile ─── */}
                 {currentStep === 1 && (
                     <View>
-                        <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">Driver Profile</Text>
-                        <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Full Name</Text>
+                        <Text style={styles.sectionTitle}>Driver Profile</Text>
+                        <View style={styles.inputCard}>
+                            <Text style={styles.inputLabel}>Full Name</Text>
                             <TextInput
                                 value={name}
-                                onChangeText={(val) => {
-                                    setName(val);
-                                    saveDraft({ name: val });
-                                }}
+                                onChangeText={(val) => { setName(val); saveDraft({ name: val }); }}
                                 placeholder="Enter your full name"
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm"
+                                placeholderTextColor="#9CA3AF"
+                                style={styles.textInput}
                             />
                         </View>
-                        
-                        <DocItem 
-                            label="Your Profile Selfie" 
-                            type="profileSelfie" 
-                            image={docs.profileSelfie} 
-                            onPick={pickImage} 
-                            icon="account-circle-outline" 
-                        />
-                        <View className="bg-blue-50/50 border border-blue-100/50 p-4 rounded-2xl mb-6">
-                            <Text className="text-[10px] font-inter-bold text-blue-700 uppercase tracking-wider mb-1">💡 Instructions</Text>
-                            <Text className="text-[11px] font-inter-medium text-blue-800 leading-4">
+                        <DocItem label="Your Profile Selfie" type="profileSelfie" image={docs.profileSelfie} onPick={pickImage} icon="account-circle-outline" />
+                        <View style={styles.infoBox}>
+                            <Text style={styles.infoTitle}>💡 Instructions</Text>
+                            <Text style={styles.infoText}>
                                 Snap a clear selfie with good lighting. Do not wear sunglasses, helmets, or caps. Ensure your face is centered.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Step 2: Aadhar Verification */}
+                {/* ─── Step 2: Aadhar ─── */}
                 {currentStep === 2 && (
                     <View>
-                        <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">Aadhar Verification</Text>
-                        <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Aadhar Card Number</Text>
+                        <Text style={styles.sectionTitle}>Aadhar Verification</Text>
+                        <View style={styles.inputCard}>
+                            <Text style={styles.inputLabel}>Aadhar Card Number</Text>
                             <TextInput
                                 value={aadharNumber}
                                 onChangeText={(val) => {
@@ -455,40 +414,33 @@ export default function DriverVerifyScreen() {
                                     saveDraft({ aadharNumber: digits });
                                 }}
                                 placeholder="12-digit Aadhar number"
+                                placeholderTextColor="#9CA3AF"
                                 keyboardType="numeric"
                                 maxLength={12}
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm"
+                                style={styles.textInput}
                             />
                         </View>
-
-                        <DocItem 
-                            label="Aadhar Card Photo" 
-                            type="aadharPhoto" 
-                            image={docs.aadharPhoto} 
-                            onPick={pickImage} 
-                            icon="card-account-details-outline" 
-                        />
-                        <View className="bg-blue-50/50 border border-blue-100/50 p-4 rounded-2xl mb-6">
-                            <Text className="text-[10px] font-inter-bold text-blue-700 uppercase tracking-wider mb-1">💡 Instructions</Text>
-                            <Text className="text-[11px] font-inter-medium text-blue-800 leading-4">
+                        <DocItem label="Aadhar Card Photo" type="aadharPhoto" image={docs.aadharPhoto} onPick={pickImage} icon="card-account-details-outline" />
+                        <View style={styles.infoBox}>
+                            <Text style={styles.infoTitle}>💡 Instructions</Text>
+                            <Text style={styles.infoText}>
                                 Place your Aadhar card on a flat surface under good lighting and snap a clear photo of the front side. Ensure the 12-digit number is readable.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Step 3: Driving License */}
+                {/* ─── Step 3: Driving License (Optional) ─── */}
                 {currentStep === 3 && (
                     <View>
-                        <View className="flex-row items-center justify-between mb-3 px-1">
-                            <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest">Driving License (Optional)</Text>
-                            <View className="bg-gray-100 px-2 py-0.5 rounded-md">
-                                <Text className="text-[8px] font-inter-bold text-text-tertiary uppercase tracking-wider">Optional</Text>
+                        <View style={styles.sectionTitleRow}>
+                            <Text style={styles.sectionTitle}>Driving License</Text>
+                            <View style={styles.optionalBadge}>
+                                <Text style={styles.optionalBadgeText}>Optional</Text>
                             </View>
                         </View>
-                        
-                        <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Driving License Number</Text>
+                        <View style={styles.inputCard}>
+                            <Text style={styles.inputLabel}>Driving License Number</Text>
                             <TextInput
                                 value={licenseNumber}
                                 onChangeText={(val) => {
@@ -497,33 +449,27 @@ export default function DriverVerifyScreen() {
                                     saveDraft({ licenseNumber: upper });
                                 }}
                                 placeholder="Enter License Number"
+                                placeholderTextColor="#9CA3AF"
                                 autoCapitalize="characters"
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm"
+                                style={styles.textInput}
                             />
                         </View>
-
-                        <DocItem 
-                            label="Driver License Photo" 
-                            type="licensePhoto" 
-                            image={docs.licensePhoto} 
-                            onPick={pickImage} 
-                            icon="card-bulleted-outline" 
-                        />
-                        <View className="bg-blue-50/50 border border-blue-100/50 p-4 rounded-2xl mb-6">
-                            <Text className="text-[10px] font-inter-bold text-blue-700 uppercase tracking-wider mb-1">💡 Instructions</Text>
-                            <Text className="text-[11px] font-inter-medium text-blue-800 leading-4">
+                        <DocItem label="Driver License Photo" type="licensePhoto" image={docs.licensePhoto} onPick={pickImage} icon="card-bulleted-outline" />
+                        <View style={styles.infoBox}>
+                            <Text style={styles.infoTitle}>💡 Instructions</Text>
+                            <Text style={styles.infoText}>
                                 If you have a driving license, please enter the license number and upload a photo of the card. You can skip this step if not applicable.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Step 4: Vehicle & RC Details */}
+                {/* ─── Step 4: Vehicle & RC ─── */}
                 {currentStep === 4 && (
                     <View>
-                        <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-3 ml-1">Vehicle & RC Details</Text>
-                        <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Vehicle RC Number</Text>
+                        <Text style={styles.sectionTitle}>Vehicle & RC Details</Text>
+                        <View style={styles.inputCard}>
+                            <Text style={styles.inputLabel}>Vehicle RC Number</Text>
                             <TextInput
                                 value={rcNumber}
                                 onChangeText={(val) => {
@@ -532,63 +478,42 @@ export default function DriverVerifyScreen() {
                                     saveDraft({ rcNumber: upper });
                                 }}
                                 placeholder="Enter RC Number"
+                                placeholderTextColor="#9CA3AF"
                                 autoCapitalize="characters"
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm"
+                                style={styles.textInput}
                             />
                         </View>
-
-                        <DocItem 
-                            label="Vehicle Registration (RC) Photo" 
-                            type="rcPhoto" 
-                            image={docs.rcPhoto} 
-                            onPick={pickImage} 
-                            icon="file-document-outline" 
-                        />
-                        <DocItem 
-                            label="Photo of your Vehicle" 
-                            type="vehiclePhoto" 
-                            image={docs.vehiclePhoto} 
-                            onPick={pickImage} 
-                            icon="truck-outline" 
-                        />
-                        <DocItem 
-                            label="Selfie with your Vehicle" 
-                            type="selfieWithVehicle" 
-                            image={docs.selfieWithVehicle} 
-                            onPick={pickImage} 
-                            icon="account-group-outline" 
-                        />
-                        <View className="bg-blue-50/50 border border-blue-100/50 p-4 rounded-2xl mb-6">
-                            <Text className="text-[10px] font-inter-bold text-blue-700 uppercase tracking-wider mb-1">💡 Instructions</Text>
-                            <Text className="text-[11px] font-inter-medium text-blue-800 leading-4">
+                        <DocItem label="Vehicle Registration (RC) Photo" type="rcPhoto" image={docs.rcPhoto} onPick={pickImage} icon="file-document-outline" />
+                        <DocItem label="Photo of your Vehicle" type="vehiclePhoto" image={docs.vehiclePhoto} onPick={pickImage} icon="truck-outline" />
+                        <DocItem label="Selfie with your Vehicle" type="selfieWithVehicle" image={docs.selfieWithVehicle} onPick={pickImage} icon="account-group-outline" />
+                        <View style={styles.infoBox}>
+                            <Text style={styles.infoTitle}>💡 Instructions</Text>
+                            <Text style={styles.infoText}>
                                 Make sure your RC number matches the physical card. The vehicle photo should clearly show the license plate.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Step 5: Payout Bank Settings */}
+                {/* ─── Step 5: Payout (Optional) ─── */}
                 {currentStep === 5 && (
                     <View>
-                        <View className="flex-row items-center justify-between mb-3 px-1">
-                            <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-widest">Payout Credentials (Optional)</Text>
-                            <View className="bg-gray-100 px-2 py-0.5 rounded-md">
-                                <Text className="text-[8px] font-inter-bold text-text-tertiary uppercase tracking-wider">Optional</Text>
+                        <View style={styles.sectionTitleRow}>
+                            <Text style={styles.sectionTitle}>Payout Credentials</Text>
+                            <View style={styles.optionalBadge}>
+                                <Text style={styles.optionalBadgeText}>Optional</Text>
                             </View>
                         </View>
-
-                        <View className="bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-6">
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Account Holder Name</Text>
+                        <View style={styles.inputCard}>
+                            <Text style={styles.inputLabel}>Account Holder Name</Text>
                             <TextInput
                                 value={accountHolderName}
-                                onChangeText={(val) => {
-                                    setAccountHolderName(val);
-                                    saveDraft({ accountHolderName: val });
-                                }}
+                                onChangeText={(val) => { setAccountHolderName(val); saveDraft({ accountHolderName: val }); }}
                                 placeholder="Name as per bank record"
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm mb-4"
+                                placeholderTextColor="#9CA3AF"
+                                style={[styles.textInput, { marginBottom: 16 }]}
                             />
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">Account Number</Text>
+                            <Text style={styles.inputLabel}>Account Number</Text>
                             <TextInput
                                 value={accountNumber}
                                 onChangeText={(val) => {
@@ -597,10 +522,11 @@ export default function DriverVerifyScreen() {
                                     saveDraft({ accountNumber: digits });
                                 }}
                                 placeholder="Bank account number"
+                                placeholderTextColor="#9CA3AF"
                                 keyboardType="numeric"
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm mb-4"
+                                style={[styles.textInput, { marginBottom: 16 }]}
                             />
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">IFSC Code</Text>
+                            <Text style={styles.inputLabel}>IFSC Code</Text>
                             <TextInput
                                 value={ifscCode}
                                 onChangeText={(val) => {
@@ -609,11 +535,12 @@ export default function DriverVerifyScreen() {
                                     saveDraft({ ifscCode: upper });
                                 }}
                                 placeholder="Ex. SBIN000123"
+                                placeholderTextColor="#9CA3AF"
                                 autoCapitalize="characters"
                                 maxLength={11}
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm mb-4"
+                                style={[styles.textInput, { marginBottom: 16 }]}
                             />
-                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase mb-1.5 ml-1">UPI Alias (VPA)</Text>
+                            <Text style={styles.inputLabel}>UPI Alias (VPA)</Text>
                             <TextInput
                                 value={upiId}
                                 onChangeText={(val) => {
@@ -622,21 +549,22 @@ export default function DriverVerifyScreen() {
                                     saveDraft({ upiId: lower });
                                 }}
                                 placeholder="name@upi"
+                                placeholderTextColor="#9CA3AF"
                                 autoCapitalize="none"
-                                className="bg-white rounded-xl h-14 px-4 font-inter-bold text-text border border-gray-100 shadow-sm"
+                                style={styles.textInput}
                             />
                         </View>
-                        <View className="bg-blue-50/50 border border-blue-100/50 p-4 rounded-2xl mb-6">
-                            <Text className="text-[10px] font-inter-bold text-blue-700 uppercase tracking-wider mb-1">💡 Instructions</Text>
-                            <Text className="text-[11px] font-inter-medium text-blue-800 leading-4">
+                        <View style={styles.infoBox}>
+                            <Text style={styles.infoTitle}>💡 Instructions</Text>
+                            <Text style={styles.infoText}>
                                 Add your bank or UPI details to withdraw earnings directly. You can skip this step and add it later in settings.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Bottom Navigation Buttons */}
-                <View className="flex-row gap-4 mt-4">
+                {/* ─── Bottom Navigation Buttons ─── */}
+                <View style={styles.navRow}>
                     {currentStep > 1 && (
                         <TouchableOpacity
                             onPress={() => {
@@ -644,13 +572,13 @@ export default function DriverVerifyScreen() {
                                 setCurrentStep(prev);
                                 saveDraft({ currentStep: prev });
                             }}
-                            className="flex-1 h-16 rounded-2xl bg-gray-100 items-center justify-center flex-row border border-gray-200"
+                            style={styles.backBtn}
                         >
-                            <Ionicons name="chevron-back" size={20} color={Colors.text} style={{ marginRight: 4 }} />
-                            <Text className="text-base font-inter-bold text-text">Back</Text>
+                            <Ionicons name="chevron-back" size={20} color="#000" style={{ marginRight: 4 }} />
+                            <Text style={styles.backBtnText}>Back</Text>
                         </TouchableOpacity>
                     )}
-                    
+
                     {currentStep < 5 ? (
                         <TouchableOpacity
                             onPress={() => {
@@ -658,40 +586,32 @@ export default function DriverVerifyScreen() {
                                 setCurrentStep(next);
                                 saveDraft({ currentStep: next });
                             }}
-                            disabled={!isStepValid(currentStep)}
-                            className={`flex-[2] h-16 rounded-2xl items-center justify-center flex-row shadow-sm ${
-                                isStepValid(currentStep) ? 'bg-primary' : 'bg-gray-200'
-                            }`}
+                            disabled={!stepValid}
+                            style={[styles.continueBtn, !stepValid && styles.continueBtnDisabled]}
                         >
-                            <Text className={`text-base font-inter-bold ${isStepValid(currentStep) ? 'text-surface' : 'text-gray-400'}`}>
+                            <Text style={[styles.continueBtnText, !stepValid && styles.continueBtnTextDisabled]}>
                                 {currentStep === 3 && licenseNumber.trim().length === 0 ? 'Skip / Continue' : 'Continue'}
                             </Text>
-                            <Ionicons 
-                                name="chevron-forward" 
-                                size={20} 
-                                color={isStepValid(currentStep) ? '#FFF' : '#9CA3AF'} 
-                                style={{ marginLeft: 4 }} 
+                            <Ionicons
+                                name="chevron-forward"
+                                size={20}
+                                color={stepValid ? '#FFF' : '#9CA3AF'}
+                                style={{ marginLeft: 4 }}
                             />
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity
                             onPress={async () => {
                                 await handleSubmit();
-                                try {
-                                    await AsyncStorage.removeItem('driver_verify_draft');
-                                } catch (e) {
-                                    console.error(e);
-                                }
+                                try { await AsyncStorage.removeItem('driver_verify_draft'); } catch (e) { console.error(e); }
                             }}
-                            disabled={loading || !isStepValid(5)}
-                            className={`flex-[2] h-16 rounded-2xl items-center justify-center shadow-xl shadow-primary/20 ${
-                                loading || !isStepValid(5) ? 'bg-gray-400' : 'bg-primary'
-                            }`}
+                            disabled={loading}
+                            style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
                         >
                             {loading ? (
                                 <ActivityIndicator color="#FFF" />
                             ) : (
-                                <Text className="text-base font-inter-bold text-surface">
+                                <Text style={styles.submitBtnText}>
                                     {!accountHolderName && !accountNumber && !upiId ? 'Skip & Submit' : 'Submit Verification'}
                                 </Text>
                             )}
@@ -703,4 +623,65 @@ export default function DriverVerifyScreen() {
     );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    // Header
+    header: { paddingBottom: 25, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+    logoutBtn: { position: 'absolute', top: 52, right: 24, zIndex: 10, padding: 8 },
+    headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFF' },
+    headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
+    // Stepper
+    stepperContainer: { paddingHorizontal: 24, paddingVertical: 16, backgroundColor: 'rgba(249,250,251,0.5)', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+    stepperRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative' },
+    stepperTrackBg: { position: 'absolute', left: 20, right: 20, top: 20, height: 2, backgroundColor: '#E5E7EB' },
+    stepperTrackFill: { position: 'absolute', left: 20, top: 20, height: 2, backgroundColor: '#000000' },
+    stepItemContainer: { alignItems: 'center', zIndex: 10, flex: 1 },
+    stepCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
+    stepCircleCompleted: { backgroundColor: '#000000', borderColor: '#000000' },
+    stepCircleActive: { backgroundColor: '#FFFFFF', borderColor: '#000000' },
+    stepCircleInactive: { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' },
+    stepLabel: { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginTop: 6 },
+    stepLabelActive: { color: '#000000' },
+    stepLabelInactive: { color: '#9CA3AF' },
+    // Scroll
+    scroll: { flex: 1 },
+    scrollContent: { paddingTop: 24, paddingHorizontal: 24, maxWidth: 500, alignSelf: 'center', width: '100%' },
+    // Section
+    sectionTitle: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
+    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
+    optionalBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+    optionalBadgeText: { fontSize: 8, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase' },
+    // Input Card
+    inputCard: { backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 24 },
+    inputLabel: { fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 6, marginLeft: 4 },
+    textInput: { backgroundColor: '#FFFFFF', borderRadius: 12, height: 56, paddingHorizontal: 16, fontSize: 14, fontWeight: '700', color: '#000000', borderWidth: 1, borderColor: '#F3F4F6' },
+    // Info Box
+    infoBox: { backgroundColor: 'rgba(239,246,255,0.5)', borderWidth: 1, borderColor: 'rgba(191,219,254,0.5)', padding: 16, borderRadius: 16, marginBottom: 24 },
+    infoTitle: { fontSize: 10, fontWeight: '700', color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+    infoText: { fontSize: 11, color: '#1E40AF', lineHeight: 18 },
+    // DocItem
+    docItemContainer: { marginBottom: 24 },
+    docItemLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
+    docItemBox: { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+    docItemEditOverlay: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 999, padding: 8 },
+    docItemEmpty: { alignItems: 'center' },
+    docItemIconBg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    docItemUploadText: { fontSize: 12, fontWeight: '700', color: '#000000' },
+    docItemSubText: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },
+    // Rejection Banner
+    rejectionBanner: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', marginBottom: 24 },
+    rejectionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+    rejectionTitle: { fontSize: 14, fontWeight: '700', color: '#EF4444', marginLeft: 8 },
+    rejectionReason: { fontSize: 12, color: 'rgba(239,68,68,0.7)', lineHeight: 20 },
+    // Nav Buttons
+    navRow: { flexDirection: 'row', gap: 16, marginTop: 16 },
+    backBtn: { flex: 1, height: 64, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#E5E7EB' },
+    backBtnText: { fontSize: 16, fontWeight: '700', color: '#000000' },
+    continueBtn: { flex: 2, height: 64, borderRadius: 16, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+    continueBtnDisabled: { backgroundColor: '#E5E7EB' },
+    continueBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+    continueBtnTextDisabled: { color: '#9CA3AF' },
+    submitBtn: { flex: 2, height: 64, borderRadius: 16, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' },
+    submitBtnDisabled: { backgroundColor: '#9CA3AF' },
+    submitBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+});

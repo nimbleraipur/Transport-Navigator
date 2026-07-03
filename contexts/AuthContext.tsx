@@ -7,6 +7,7 @@ export interface UserData {
   name: string;
   phone: string;
   role: 'customer' | 'driver' | 'admin';
+  customId?: string;      // e.g. "BL473829"
   vehicleType?: string;
   vehicleNumber?: string;
   licenseNumber?: string;
@@ -43,7 +44,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   sendOtp: (phone: string) => Promise<{ success: boolean; otp?: string; error?: string }>;
   verifyOtp: (phone: string, otp: string, role: string) => Promise<{ success: boolean; isNew?: boolean; error?: string }>;
-  register: (data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string }) => Promise<{ success: boolean; error?: string }>;
+  register: (data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string; cityCode?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserData>) => void;
   refreshUser: () => Promise<void>;
@@ -150,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: result.error };
   }
 
-  async function register(data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string }) {
+  async function register(data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string; cityCode?: string }) {
     const result = await apiCall('/api/auth/register', data);
     if (result.success) {
       await AsyncStorage.setItem('auth_token', result.token);

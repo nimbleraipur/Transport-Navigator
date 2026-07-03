@@ -104,6 +104,32 @@ function LocationSearchItem({
   );
 }
 
+const VEHICLE_FALLBACK_ICONS: { [key: string]: string } = {
+  'auto': 'rickshaw',
+  'auto-rickshaw': 'rickshaw',
+  'rickshaw': 'rickshaw',
+  'e-rickshaw': 'rickshaw',
+  'tempo': 'van-utility',
+  'van-utility': 'van-utility',
+  'truck-delivery': 'truck-delivery',
+  'truck': 'truck',
+  'standard-truck': 'truck',
+  'heavy-truck': 'truck-trailer',
+  'truck-trailer': 'truck-trailer',
+  'pickup': 'car-pickup',
+  'van-passenger': 'car-pickup',
+};
+
+function getVehicleFallbackIcon(icon?: string, type?: string): string {
+  const iconKey = (icon || '').toLowerCase();
+  const typeKey = (type || '').toLowerCase();
+  return (
+    VEHICLE_FALLBACK_ICONS[iconKey] ||
+    VEHICLE_FALLBACK_ICONS[typeKey] ||
+    'truck'
+  );
+}
+
 function VehicleOption({
   vehicle,
   isActive,
@@ -117,8 +143,10 @@ function VehicleOption({
   onPress: () => void;
   isCalculating: boolean;
 }) {
+  const [imgError, setImgError] = useState(false);
   const totalPrice = (vehicle.baseFare || 0) + Math.round((distance || 0) * (vehicle.perKmCharge || 0));
   const imgSource = getVehicleImageSource(vehicle.icon, vehicle.type);
+  const fallbackIcon = getVehicleFallbackIcon(vehicle.icon, vehicle.type);
 
   return (
     <TouchableOpacity
@@ -127,11 +155,31 @@ function VehicleOption({
       className="flex-row items-center py-3 mb-2 transition-all"
     >
       <View className="w-16 h-16 items-center justify-center mr-4">
-        <Image
-          source={imgSource}
-          style={{ width: 56, height: 56 }}
-          resizeMode="contain"
-        />
+        {imgError || !imgSource ? (
+          <View
+            style={{
+              width: 56,
+              height: 56,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: isActive ? Colors.primary + '15' : '#F3F4F6',
+              borderRadius: 12,
+            }}
+          >
+            <MaterialCommunityIcons
+              name={fallbackIcon as any}
+              size={34}
+              color={isActive ? Colors.primary : Colors.textTertiary || '#9CA3AF'}
+            />
+          </View>
+        ) : (
+          <Image
+            source={imgSource}
+            style={{ width: 56, height: 56 }}
+            resizeMode="contain"
+            onError={() => setImgError(true)}
+          />
+        )}
       </View>
       <View className="flex-1">
         <Text className={`text-[15px] font-inter-bold ${isActive ? 'text-primary' : 'text-text'} mb-0.5`}>

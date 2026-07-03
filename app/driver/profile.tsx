@@ -8,13 +8,14 @@ import * as ImagePicker from 'expo-image-picker';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/query-client';
+import { getVehicleImageSource } from '@/lib/vehicles';
 
 function ProfileField({ label, value, icon, isLocked = false, onChangeText, placeholder, keyboardType = 'default', autoCapitalize = 'none' }: any) {
   const safeValue = value ? String(value) : '';
 
   return (
     <View style={{ marginBottom: 20 }}>
-      <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8, marginLeft: 4 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: '#000000', textTransform: 'uppercase', marginBottom: 8, marginLeft: 4 }}>
         {label}
       </Text>
       <View style={{ 
@@ -22,10 +23,15 @@ function ProfileField({ label, value, icon, isLocked = false, onChangeText, plac
         paddingHorizontal: 16, 
         borderRadius: 16, 
         borderWidth: 1, 
-        borderColor: '#F3F4F6', 
+        borderColor: isLocked ? '#F3F4F6' : '#E5E7EB', 
         backgroundColor: isLocked ? '#F9FAFB' : '#FFFFFF',
         height: 54,
-        alignItems: 'center'
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: isLocked ? 0 : 0.05,
+        shadowRadius: 2,
+        elevation: isLocked ? 0 : 2,
       }}>
         <View style={{ marginRight: 14 }}>
           <Ionicons name={icon} size={18} color={isLocked ? '#9CA3AF' : Colors.primary} />
@@ -214,6 +220,7 @@ export default function DriverProfileScreen() {
   };
 
   const vehicleLabel = user?.vehicleType ? user.vehicleType.charAt(0).toUpperCase() + user.vehicleType.slice(1) : 'N/A';
+  const vehicleImage = getVehicleImageSource(undefined, user?.vehicleType);
 
   return (
     <View className="flex-1 bg-[#FDFDFD]">
@@ -246,9 +253,22 @@ export default function DriverProfileScreen() {
             )}
           </View>
           <Text className="text-xl font-inter-bold text-surface mt-5">{String(user?.name || 'Driver')}</Text>
-          <View className="bg-accent/20 px-2.5 py-1 rounded-full mt-2 border border-accent/20">
-            <Text className="text-[9px] font-inter-bold text-accent uppercase tracking-widest">Verified Driver • {String(vehicleLabel)}</Text>
+          <View className="flex-row items-center bg-white/10 px-4 py-2 rounded-full mt-4 border border-white/10 shadow-sm">
+            {vehicleImage && (
+              <View className="w-7 h-7 items-center justify-center bg-white rounded-full mr-2.5 p-1">
+                <Image source={vehicleImage} style={{ width: 20, height: 20 }} resizeMode="contain" />
+              </View>
+            )}
+            <Text className="text-[12px] font-inter-bold text-white uppercase tracking-wider">
+              {String(vehicleLabel)}
+            </Text>
           </View>
+          {user?.customId && (
+            <View className="bg-white/10 px-5 py-2 rounded-full mt-2.5 border border-white/15 flex-row items-center">
+              <MaterialCommunityIcons name="identifier" size={15} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
+              <Text className="text-[13px] font-inter-bold text-white tracking-widest">{user.customId}</Text>
+            </View>
+          )}
         </View>
       </LinearGradient>
 

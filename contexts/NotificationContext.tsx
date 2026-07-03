@@ -53,6 +53,43 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     loadNotifications();
   }, [user?.id, token]);
 
+  // Listen for incoming push notifications to dynamically populate the in-app notification inbox
+  useEffect(() => {
+    if (Platform.OS === 'web' || !Notifications) return;
+
+    const subscription = Notifications.addNotificationReceivedListener((notification: any) => {
+      const { title, body, data } = notification.request.content;
+      console.log('[PUSH-RECEIVED] Incoming notification:', title, body, data);
+      
+      setNotifications(prev => {
+        const id = notification.request.identifier || (Date.now().toString() + Math.random().toString(36).substr(2, 5));
+        if (prev.some(n => n.id === id)) return prev; // Avoid duplicates
+
+        const item: NotificationItem = {
+          id,
+          title: title || 'Notification',
+          message: body || '',
+          type: data?.type || 'system',
+          read: false,
+          createdAt: new Date().toISOString(),
+        };
+        const updated = [item, ...prev].slice(0, 50);
+        persist(updated);
+        return updated;
+      });
+    });
+
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      const { title, body, data } = response.notification.request.content;
+      console.log('[PUSH-CLICKED] User clicked notification:', title, data);
+    });
+
+    return () => {
+      subscription.remove();
+      responseSubscription.remove();
+    };
+  }, []);
+
   async function registerForPushNotificationsAsync() {
     if (Platform.OS === 'web' || !Notifications) return;
 

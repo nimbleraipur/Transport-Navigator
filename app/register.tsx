@@ -25,14 +25,14 @@ function AnimatedInput({ onFocus, onBlur, label, ...props }: any) {
 
   const borderColor = borderFade.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#F3F4F6', Colors.primary]
+    outputRange: ['#E5E7EB', Colors.primary]
   });
 
   return (
     <View className="mb-5">
-      <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] mb-2 ml-1">{label}</Text>
+      <Text className="text-[10px] font-inter-bold text-black uppercase tracking-[1.5px] mb-2 ml-1">{label}</Text>
       <Animated.View
-        className="rounded-xl px-4 py-0.5 bg-gray-50/50 border"
+        className="rounded-xl px-4 py-0.5 bg-white border shadow-sm shadow-black/5"
         style={{ borderColor }}
       >
         <TextInput
@@ -94,6 +94,13 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [availableVehicles, setAvailableVehicles] = useState<{type: string, label: string, icon: any}[]>([]);
   const [fetchingVehicles, setFetchingVehicles] = useState(false);
+
+  // City / location states
+  // For drivers: start in 'loading' immediately so form never flashes before city check
+  const [cityCheckState, setCityCheckState] = useState<'loading' | 'found' | 'not_found' | 'permission_denied' | 'idle'>(params.role === 'driver' ? 'loading' : 'idle');
+  const [detectedCity, setDetectedCity] = useState<{ id: string; name: string; state: string } | null>(null);
+  const [activeCities, setActiveCities] = useState<{ name: string; state: string }[]>([]);
+
   const isDriver = params.role === 'driver';
 
   const headerSlide = useRef(new Animated.Value(-20)).current;
@@ -103,28 +110,117 @@ export default function RegisterScreen() {
 
   useEffect(() => {
     if (isDriver) {
-      fetchVehicles();
+      checkCityAndFetchVehicles();
     }
   }, [isDriver]);
 
-  const fetchVehicles = async () => {
+  const checkCityAndFetchVehicles = async () => {
+    setCityCheckState('loading');
+    setFetchingVehicles(true);
+
+    try {
+      const baseUrl = getApiUrl();
+
+      // Step 1: Pre-fetch all active cities (for "not available" info screen)
+      try {
+        const allCitiesRes = await fetch(`${baseUrl}/api/cities`);
+        if (allCitiesRes.ok) {
+          const allCitiesData = await allCitiesRes.json();
+          const cities = Array.isArray(allCitiesData) ? allCitiesData : [];
+          setActiveCities(cities.filter((c: any) => c.isActive).map((c: any) => ({ name: c.name, state: c.state })));
+        }
+      } catch (cityListErr) {
+        console.warn('[REGISTER] Could not fetch city list:', cityListErr);
+      }
+
+      // Step 2: Request GPS permission
+      const Location = await import('expo-location');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        setCityCheckState('permission_denied');
+        setFetchingVehicles(false);
+        // Still try to load all vehicles as fallback
+        fetchVehiclesFallback();
+        return;
+      }
+
+      // Step 3: Get current position
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = loc.coords;
+
+      // Step 4: Check if this location is in a service city
+      const cityRes = await fetch(`${baseUrl}/api/cities/check?lat=${latitude}&lng=${longitude}`);
+
+      if (!cityRes.ok) {
+        // 404 = not in any operational city
+        setCityCheckState('not_found');
+        setFetchingVehicles(false);
+        return;
+      }
+
+      const cityData = await cityRes.json();
+      setDetectedCity({ id: cityData.id, name: cityData.name, state: cityData.state });
+      setCityCheckState('found');
+
+      // Step 5: Fetch vehicles for this specific city
+      await fetchVehiclesByCityId(cityData.id);
+
+    } catch (e) {
+      console.error('[REGISTER] City check failed:', e);
+      // Fallback: show all vehicles
+      setCityCheckState('found');
+      fetchVehiclesFallback();
+    }
+  };
+
+  const fetchVehiclesByCityId = async (cityId: string) => {
+    setFetchingVehicles(true);
+    try {
+      const baseUrl = getApiUrl();
+      const res = await fetch(`${baseUrl}/api/vehicles?cityId=${cityId}`);
+      const data = await res.json();
+      if (data.vehicles && data.vehicles.length > 0) {
+        const options = data.vehicles.map((v: any) => ({
+          type: v.type,
+          label: v.name,
+          icon: normalizeVehicleIcon(v.icon),
+        }));
+        setAvailableVehicles(options);
+        setVehicleType(data.vehicles[0].type);
+      }
+    } catch (e) {
+      console.error('[REGISTER] Failed to fetch vehicles by city:', e);
+      fetchVehiclesFallback();
+    } finally {
+      setFetchingVehicles(false);
+    }
+  };
+
+  const fetchVehiclesFallback = async () => {
     setFetchingVehicles(true);
     try {
       const baseUrl = getApiUrl();
       const res = await fetch(`${baseUrl}/api/vehicles`);
       const data = await res.json();
       if (data.vehicles && data.vehicles.length > 0) {
-        const options = data.vehicles.map((v: any, index: number) => ({
+        const options = data.vehicles.map((v: any) => ({
           type: v.type,
           label: v.name,
-          icon: v.icon || (v.type?.toLowerCase().includes('auto') ? 'auto-rickshaw' : v.type?.toLowerCase().includes('tempo') ? 'truck-delivery' : 'truck'),
+          icon: normalizeVehicleIcon(v.icon),
         }));
         setAvailableVehicles(options);
         setVehicleType(data.vehicles[0].type);
+      } else {
+        setAvailableVehicles([
+          { type: 'auto', label: 'Auto', icon: 'auto-rickshaw' as const },
+          { type: 'e-rickshaw', label: 'E-Rickshaw', icon: 'e-rickshaw' as const },
+          { type: 'tempo', label: 'Tempo', icon: 'truck-delivery' as const },
+          { type: 'truck', label: 'Truck', icon: 'truck' as const },
+        ]);
       }
     } catch (e) {
-      console.error('Failed to fetch vehicles:', e);
-      // Fallback
+      console.error('[REGISTER] Fallback vehicle fetch failed:', e);
       setAvailableVehicles([
         { type: 'auto', label: 'Auto', icon: 'auto-rickshaw' as const },
         { type: 'e-rickshaw', label: 'E-Rickshaw', icon: 'e-rickshaw' as const },
@@ -136,7 +232,18 @@ export default function RegisterScreen() {
     }
   };
 
+  // Run entry animation when the form becomes visible:
+  // - Customers: immediately on mount
+  // - Drivers: after city check completes (found / permission_denied)
+  const shouldShowForm = !isDriver || cityCheckState === 'found' || cityCheckState === 'permission_denied';
+
   useEffect(() => {
+    if (!shouldShowForm) return;
+    // Reset values before animating in (handles driver re-mount after loading screen)
+    headerSlide.setValue(-20);
+    headerOpacity.setValue(0);
+    formSlide.setValue(20);
+    formOpacity.setValue(0);
     Animated.stagger(150, [
       Animated.parallel([
         Animated.timing(headerSlide, { toValue: 0, duration: 600, useNativeDriver: true }),
@@ -147,16 +254,21 @@ export default function RegisterScreen() {
         Animated.timing(formOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [shouldShowForm]);
 
   async function handleRegister() {
     if (!name.trim()) { Alert.alert('Missing Name', 'Please enter your full name'); return; }
     if (isDriver && !vehicleNumber.trim()) { Alert.alert('Vehicle Missing', 'Please enter your vehicle number'); return; }
     setLoading(true);
+    // Derive 2-letter city code from detected city name (e.g. "Bilaspur" → "BL")
+    const cityCode = detectedCity
+      ? detectedCity.name.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 2)
+      : 'ML'; // ML = MyLoad default for customers or unknown city
     const result = await register({
       phone: params.phone || '',
       name: name.trim(),
       role: params.role || 'customer',
+      cityCode,
       ...(isDriver && { vehicleType, vehicleNumber: vehicleNumber.trim() }),
     });
     setLoading(false);
@@ -168,7 +280,89 @@ export default function RegisterScreen() {
     }
   }
 
+  // ── "Service Not Available" Screen ────────────────────────────────────────
+  if (isDriver && cityCheckState === 'not_found') {
+    return (
+      <LinearGradient colors={[Colors.navyDark, Colors.navyMid]} className="flex-1">
+        <View className="flex-1 items-center justify-center px-8" style={{ paddingTop: insets.top }}>
+          <View className="w-24 h-24 rounded-full bg-white/10 items-center justify-center mb-6 border border-white/10">
+            <MaterialCommunityIcons name="map-marker-off" size={44} color="rgba(255,255,255,0.7)" />
+          </View>
 
+          <Text className="text-2xl font-inter-bold text-surface text-center mb-3">
+            Service Not Available
+          </Text>
+          <Text className="text-sm font-inter-medium text-white/50 text-center mb-8 leading-6">
+            Sorry! We are currently not available in your area.{'\n'}
+            Stay tuned — we are expanding soon! 🚀
+          </Text>
+
+          <View className="bg-white/8 rounded-2xl p-5 w-full border border-white/10 mb-8">
+            <View className="flex-row items-center mb-3">
+              <MaterialCommunityIcons name="information-outline" size={18} color="rgba(255,255,255,0.5)" />
+              <Text className="text-[11px] font-inter-bold text-white/50 uppercase tracking-widest ml-2">Currently Active In</Text>
+            </View>
+            {activeCities.length > 0 ? (
+              activeCities.map((c, i) => (
+                <Text key={i} className="text-sm font-inter-semibold text-white/70 leading-6">
+                  • {c.name}, {c.state}
+                </Text>
+              ))
+            ) : (
+              <Text className="text-sm font-inter-semibold text-white/70 leading-5">
+                • More cities coming soon...
+              </Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            className="w-full h-14 rounded-2xl overflow-hidden mb-4"
+            onPress={checkCityAndFetchVehicles}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={[Colors.primary, Colors.primaryDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              className="flex-1 items-center justify-center flex-row"
+            >
+              <Ionicons name="refresh" size={18} color={Colors.surface} style={{ marginRight: 8 }} />
+              <Text className="text-sm font-inter-bold text-surface">Retry Location Check</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="w-full h-12 rounded-2xl bg-white/10 items-center justify-center border border-white/10"
+            onPress={async () => {
+              if (router.canGoBack()) router.back();
+              else { await logout(); router.replace('/'); }
+            }}
+            activeOpacity={0.8}
+          >
+            <Text className="text-sm font-inter-semibold text-white/60">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  // ── Location Loading Screen ────────────────────────────────────────────────
+  if (isDriver && cityCheckState === 'loading') {
+    return (
+      <LinearGradient colors={[Colors.navyDark, Colors.navyMid]} className="flex-1 items-center justify-center">
+        <View className="items-center px-8">
+          <View className="w-20 h-20 rounded-full bg-white/10 items-center justify-center mb-6 border border-white/10">
+            <MaterialCommunityIcons name="map-marker-radius" size={36} color="rgba(255,255,255,0.7)" />
+          </View>
+          <ActivityIndicator color={Colors.surface} size="large" style={{ marginBottom: 16 }} />
+          <Text className="text-lg font-inter-bold text-surface text-center mb-2">Detecting Location</Text>
+          <Text className="text-sm font-inter-medium text-white/50 text-center">
+            Checking if our service is{'\n'}available in your area...
+          </Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={[Colors.navyDark, Colors.navyMid]} className="flex-1">
@@ -213,6 +407,16 @@ export default function RegisterScreen() {
           className="mx-6 bg-surface rounded-[32px] p-6 shadow-2xl"
           style={{ transform: [{ translateY: formSlide }], opacity: formOpacity }}
         >
+          {/* City Badge for drivers */}
+          {isDriver && detectedCity && (
+            <View className="flex-row items-center bg-green-50 rounded-xl px-3 py-2.5 mb-5 border border-green-100">
+              <MaterialCommunityIcons name="map-marker-check" size={16} color="#10B981" />
+              <Text className="text-xs font-inter-bold text-green-700 ml-2">
+                Service available in {detectedCity.name}, {detectedCity.state}
+              </Text>
+            </View>
+          )}
+
           <AnimatedInput
             label="Full Name"
             placeholder="John Doe"
@@ -223,13 +427,16 @@ export default function RegisterScreen() {
 
           {isDriver && (
             <View>
-              <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] mb-3 ml-1">Select Transport</Text>
+              <Text className="text-[10px] font-inter-bold text-black uppercase tracking-[1.5px] mb-3 ml-1">Select Transport</Text>
               <View className="flex-row mb-6 flex-wrap" style={{ marginHorizontal: -4 }}>
                 {fetchingVehicles ? (
-                  <ActivityIndicator color={Colors.primary} className="py-4" />
+                  <View className="flex-1 items-center py-6">
+                    <ActivityIndicator color={Colors.primary} />
+                    <Text className="text-[11px] font-inter-medium text-text-tertiary mt-2">Loading vehicles...</Text>
+                  </View>
                 ) : (
                   availableVehicles.map((v, i) => (
-                    <View key={v.type} style={{ width: isSmallScreen ? '33.33%' : '25%' }}>
+                    <View key={v.type} style={{ width: '50%', marginBottom: 8 }}>
                       <VehicleCard
                         vehicle={v}
                         index={i}

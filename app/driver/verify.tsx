@@ -647,21 +647,21 @@ const styles = StyleSheet.create({
     scroll: { flex: 1 },
     scrollContent: { paddingTop: 24, paddingHorizontal: 24, maxWidth: 500, alignSelf: 'center', width: '100%' },
     // Section
-    sectionTitle: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: '#000000', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
     sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
     optionalBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
     optionalBadgeText: { fontSize: 8, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase' },
     // Input Card
     inputCard: { backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 24 },
-    inputLabel: { fontSize: 10, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 6, marginLeft: 4 },
-    textInput: { backgroundColor: '#FFFFFF', borderRadius: 12, height: 56, paddingHorizontal: 16, fontSize: 14, fontWeight: '700', color: '#000000', borderWidth: 1, borderColor: '#F3F4F6' },
+    inputLabel: { fontSize: 11, fontWeight: '700', color: '#000000', textTransform: 'uppercase', marginBottom: 6, marginLeft: 4 },
+    textInput: { backgroundColor: '#FFFFFF', borderRadius: 12, height: 56, paddingHorizontal: 16, fontSize: 14, fontWeight: '700', color: '#000000', borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
     // Info Box
     infoBox: { backgroundColor: 'rgba(239,246,255,0.5)', borderWidth: 1, borderColor: 'rgba(191,219,254,0.5)', padding: 16, borderRadius: 16, marginBottom: 24 },
     infoTitle: { fontSize: 10, fontWeight: '700', color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
     infoText: { fontSize: 11, color: '#1E40AF', lineHeight: 18 },
     // DocItem
     docItemContainer: { marginBottom: 24 },
-    docItemLabel: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
+    docItemLabel: { fontSize: 12, fontWeight: '700', color: '#000000', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
     docItemBox: { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
     docItemEditOverlay: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 999, padding: 8 },
     docItemEmpty: { alignItems: 'center' },

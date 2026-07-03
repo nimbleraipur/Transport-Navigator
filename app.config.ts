@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: IS_DRIVER ? 'My Load Driver' : 'My Load 24',
   slug: 'md-raza-chouhan', // Must match the project ID on Expo dashboard
-  version: '1.0.3',
+  version: '1.0.5',
   orientation: 'portrait',
   icon: IS_DRIVER ? './assets/images/Myload_Driver.png' : './assets/images/icon.png',
   scheme: IS_DRIVER ? 'myload24driver' : 'myload24',
@@ -27,8 +27,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
-    versionCode: 8,
-    permissions: ["CAMERA", "READ_MEDIA_IMAGES", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "RECORD_AUDIO", "com.google.android.gms.permission.AD_ID"],
+    versionCode: 10,
+    permissions: ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "RECORD_AUDIO", "com.google.android.gms.permission.AD_ID"],
     softwareKeyboardLayoutMode: 'pan',
     adaptiveIcon: {
       backgroundColor: '#0A1628',

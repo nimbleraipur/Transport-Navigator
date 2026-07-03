@@ -106,6 +106,59 @@ export default function DriverSupportScreen() {
             </View>
           </View>
         </View>
+
+        {/* Contact Information Card */}
+        <View className="mt-4 bg-white rounded-[24px] p-5 border border-gray-50 shadow-sm">
+          <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[2px] mb-4 ml-1">Contact Information</Text>
+
+          {/* Phone */}
+          <TouchableOpacity
+            className="flex-row items-center mb-3 bg-gray-50/70 rounded-2xl p-3.5 border border-gray-100"
+            onPress={() => Linking.openURL('tel:+917354647786')}
+            activeOpacity={0.7}
+          >
+            <View className="w-10 h-10 rounded-xl bg-primary/8 items-center justify-center mr-3.5">
+              <Ionicons name="call-outline" size={18} color={Colors.primary} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-wide mb-0.5">Phone Number</Text>
+              <Text className="text-sm font-inter-bold text-text">+91 73546 47786</Text>
+            </View>
+            <Ionicons name="open-outline" size={14} color={Colors.textTertiary} />
+          </TouchableOpacity>
+
+          {/* Email */}
+          <TouchableOpacity
+            className="flex-row items-center mb-3 bg-gray-50/70 rounded-2xl p-3.5 border border-gray-100"
+            onPress={() => Linking.openURL('mailto:myload24ktg@gmail.com')}
+            activeOpacity={0.7}
+          >
+            <View className="w-10 h-10 rounded-xl bg-primary/8 items-center justify-center mr-3.5">
+              <Ionicons name="mail-outline" size={18} color={Colors.primary} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-wide mb-0.5">Email Address</Text>
+              <Text className="text-sm font-inter-bold text-text">myload24ktg@gmail.com</Text>
+            </View>
+            <Ionicons name="open-outline" size={14} color={Colors.textTertiary} />
+          </TouchableOpacity>
+
+          {/* WhatsApp */}
+          <TouchableOpacity
+            className="flex-row items-center bg-gray-50/70 rounded-2xl p-3.5 border border-gray-100"
+            onPress={() => Linking.openURL('https://wa.me/917354647786')}
+            activeOpacity={0.7}
+          >
+            <View className="w-10 h-10 rounded-xl bg-[#25D366]/10 items-center justify-center mr-3.5">
+              <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-inter-bold text-text-tertiary uppercase tracking-wide mb-0.5">WhatsApp</Text>
+              <Text className="text-sm font-inter-bold text-text">+91 73546 47786</Text>
+            </View>
+            <Ionicons name="open-outline" size={14} color={Colors.textTertiary} />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </View>
   );

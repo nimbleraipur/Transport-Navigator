@@ -558,6 +558,21 @@ export default function DriverDashboardScreen() {
   const proceedToggleOnline = async () => {
     setIsTogglingOnline(true);
     try {
+      let pushToken = undefined;
+      try {
+        if (Platform.OS !== 'web' && Notifications) {
+          const { status } = await Notifications.getPermissionsAsync();
+          if (status === 'granted') {
+            const tokenRes = await Notifications.getExpoPushTokenAsync({
+              projectId: "b59bcbe1-1876-4a8a-a87e-6684317f62b4"
+            });
+            pushToken = tokenRes.data;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch pushToken on toggleOnline:', err);
+      }
+
       const baseUrl = getApiUrl();
       const url = new URL('/api/users/toggle-online', baseUrl);
       const res = await fetch(url.toString(), {
@@ -566,6 +581,7 @@ export default function DriverDashboardScreen() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        body: JSON.stringify({ pushToken })
       });
 
       const data = await res.json();

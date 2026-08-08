@@ -69,6 +69,7 @@ export default function DriverProfileScreen() {
   
   const [saving, setSaving] = useState(false);
   const [uploadingQR, setUploadingQR] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   
   // Robust bank details state
   const [bankDetails, setBankDetails] = useState({
@@ -219,6 +220,57 @@ export default function DriverProfileScreen() {
     }
   };
 
+  const pickProfilePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Photo library access is needed. Please allow it in Settings.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        uploadProfilePhoto(result.assets[0].uri);
+      }
+    } catch (e) {
+      console.error('Error picking profile photo:', e);
+      Alert.alert('Error', 'Could not open gallery');
+    }
+  };
+  const uploadProfilePhoto = async (uri: string) => {
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'photo.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpg`;
+      
+      formData.append('photo', { uri, name: filename, type } as any);
+
+      const baseUrl = getApiUrl();
+      const res = await fetch(new URL('/api/users/profile-photo', baseUrl).toString(), {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.user) {
+        updateUser(data.user);
+        Alert.alert('Success', 'Profile photo updated successfully.');
+      } else {
+        Alert.alert('Error', data.error || 'Failed to upload profile photo.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Connection failed.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const vehicleLabel = user?.vehicleType ? user.vehicleType.charAt(0).toUpperCase() + user.vehicleType.slice(1) : 'N/A';
   const vehicleImage = getVehicleImageSource(undefined, user?.vehicleType);
 
@@ -239,36 +291,55 @@ export default function DriverProfileScreen() {
           <Text className="flex-1 text-center text-lg font-inter-bold text-surface mr-10">Driver Identity</Text>
         </View>
 
-        <View className="items-center">
-          <View className="w-24 h-24 rounded-[32px] bg-white/10 items-center justify-center border border-white/10 shadow-2xl relative overflow-hidden">
-            {user?.profileSelfie ? (
-              <Image source={{ uri: user.profileSelfie }} className="w-full h-full" resizeMode="cover" />
-            ) : (
-              <LinearGradient
-                colors={['#1B3A5C', '#132743']}
-                className="w-full h-full rounded-[32px] items-center justify-center"
-              >
-                <FontAwesome5 name="user-tie" size={40} color={Colors.surface} />
-              </LinearGradient>
-            )}
-          </View>
-          <Text className="text-xl font-inter-bold text-surface mt-5">{String(user?.name || 'Driver')}</Text>
-          <View className="flex-row items-center bg-white/10 px-4 py-2 rounded-full mt-4 border border-white/10 shadow-sm">
-            {vehicleImage && (
-              <View className="w-7 h-7 items-center justify-center bg-white rounded-full mr-2.5 p-1">
-                <Image source={vehicleImage} style={{ width: 20, height: 20 }} resizeMode="contain" />
+        <View className="flex-row items-center px-6 mt-1.5">
+          {/* Left Side: Circular Profile Avatar (Editable) */}
+          <TouchableOpacity 
+            onPress={pickProfilePhoto}
+            disabled={uploadingPhoto}
+            className="w-20 h-20 rounded-full bg-white/10 items-center justify-center border-2 border-white/20 relative shadow-2xl mr-4"
+            style={{ alignItems: 'center', justifyContent: 'center' }}
+          >
+            <View className="w-full h-full rounded-full overflow-hidden items-center justify-center" style={{ overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+              {uploadingPhoto ? (
+                <ActivityIndicator color={Colors.surface} size="small" />
+              ) : user?.profileSelfie ? (
+                <Image 
+                  source={{ uri: user.profileSelfie }} 
+                  className="w-full h-full rounded-full" 
+                  resizeMode="cover" 
+                  style={{ alignSelf: 'center' }}
+                />
+              ) : (
+                <LinearGradient
+                  colors={['#1B3A5C', '#132743']}
+                  className="w-full h-full rounded-full items-center justify-center"
+                  style={{ alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <FontAwesome5 name="user-tie" size={32} color={Colors.surface} style={{ alignSelf: 'center' }} />
+                </LinearGradient>
+              )}
+            </View>
+            
+            {/* Edit overlay badge */}
+            <View className="absolute bottom-0 right-0 w-6 h-6 bg-primary rounded-full items-center justify-center border border-white shadow">
+              <Ionicons name="camera" size={12} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Right Side: Driver Information Column */}
+          <View className="flex-1 justify-center" style={{ gap: 4 }}>
+            <Text className="text-xl font-inter-bold text-white leading-7" numberOfLines={1}>
+              {String(user?.name || 'Driver')}
+            </Text>
+
+            {/* Custom/User ID Pill */}
+            {user?.customId && (
+              <View className="bg-white/10 px-3 py-1 rounded-full border border-white/10 flex-row items-center" style={{ alignSelf: 'flex-start' }}>
+                <MaterialCommunityIcons name="identifier" size={13} color="rgba(255,255,255,0.7)" style={{ marginRight: 5 }} />
+                <Text className="text-[11px] font-inter-bold text-white tracking-widest">{user.customId}</Text>
               </View>
             )}
-            <Text className="text-[12px] font-inter-bold text-white uppercase tracking-wider">
-              {String(vehicleLabel)}
-            </Text>
           </View>
-          {user?.customId && (
-            <View className="bg-white/10 px-5 py-2 rounded-full mt-2.5 border border-white/15 flex-row items-center">
-              <MaterialCommunityIcons name="identifier" size={15} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
-              <Text className="text-[13px] font-inter-bold text-white tracking-widest">{user.customId}</Text>
-            </View>
-          )}
         </View>
       </LinearGradient>
 
@@ -278,6 +349,28 @@ export default function DriverProfileScreen() {
         style={{ opacity: opacityAnim, transform: [{ translateY: slideAnim }] }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Assigned Vehicle Card */}
+        <View style={{ backgroundColor: 'white', borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 20, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 2 }}>
+          <View style={{ width: 80, height: 80, borderRadius: 20, backgroundColor: '#F9FAFB', alignItems: 'center', justifyContent: 'center', padding: 8, marginRight: 16 }}>
+            {vehicleImage ? (
+              <Image source={vehicleImage} style={{ width: 60, height: 60, alignSelf: 'center' }} resizeMode="contain" />
+            ) : (
+              <Ionicons name="car" size={36} color={Colors.primary} style={{ alignSelf: 'center' }} />
+            )}
+          </View>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: Colors.primary, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4 }}>Assigned Vehicle</Text>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 6 }}>{vehicleLabel}</Text>
+            {user?.vehicleNumber ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' }}>
+                <MaterialCommunityIcons name="car-info" size={12} color="#4B5563" style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#374151', textTransform: 'uppercase' }}>{user.vehicleNumber}</Text>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 12, color: '#9CA3AF' }}>No registration plate set</Text>
+            )}
+          </View>
+        </View>
         {/* Official Details - READ ONLY */}
         <View style={{ backgroundColor: 'white', borderRadius: 32, padding: 24, borderWidth: 1, borderColor: '#F9FAFB', marginBottom: 20 }}>
           <Text className="text-[10px] font-inter-bold text-primary uppercase tracking-[2px] mb-6 pb-2.5 border-b border-gray-50">Official Details</Text>

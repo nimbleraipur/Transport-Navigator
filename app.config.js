@@ -1,13 +1,12 @@
-import { ExpoConfig, ConfigContext } from 'expo/config';
-
 const APP_MODE = process.env.EXPO_PUBLIC_APP_MODE || 'customer';
 const IS_DRIVER = APP_MODE === 'driver';
 
-export default ({ config }: ConfigContext): ExpoConfig => ({
+module.exports = ({ config }) => ({
   ...config,
+  owner: "nimbleraipur",
   name: IS_DRIVER ? 'My Load Driver' : 'My Load 24',
   slug: 'md-raza-chouhan', // Must match the project ID on Expo dashboard
-  version: '1.0.5',
+  version: '1.0.6',
   orientation: 'portrait',
   icon: IS_DRIVER ? './assets/images/Myload_Driver.png' : './assets/images/icon.png',
   scheme: IS_DRIVER ? 'myload24driver' : 'myload24',
@@ -23,12 +22,26 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
     config: {
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyD-VnFv88AltoKA26oOvMfIWouWL_-JQEc"
-    }
+    },
+    infoPlist: {}
   },
   android: {
     package: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
-    versionCode: 10,
-    permissions: ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "RECORD_AUDIO", "com.google.android.gms.permission.AD_ID"],
+    googleServicesFile: IS_DRIVER ? './google-services-driver.json' : './google-services-customer.json',
+    versionCode: 13,
+    permissions: [
+      "CAMERA",
+      "READ_EXTERNAL_STORAGE",
+      "WRITE_EXTERNAL_STORAGE",
+      "RECORD_AUDIO",
+      "com.google.android.gms.permission.AD_ID",
+      "ACCESS_COARSE_LOCATION",
+      "ACCESS_FINE_LOCATION",
+      "POST_NOTIFICATIONS",
+      "USE_FULL_SCREEN_INTENT",
+      "SYSTEM_ALERT_WINDOW",
+      "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+    ],
     softwareKeyboardLayoutMode: 'pan',
     adaptiveIcon: {
       backgroundColor: '#0A1628',
@@ -59,6 +72,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         cameraPermission: 'Allow $(PRODUCT_NAME) to use the camera to capture documents.',
       },
     ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/images/icon.png',
+        color: '#1B6EF3',
+        sounds: [
+          './assets/sounds/new_booking.mp3'
+        ]
+      }
+    ]
   ],
   experiments: {
     typedRoutes: true,

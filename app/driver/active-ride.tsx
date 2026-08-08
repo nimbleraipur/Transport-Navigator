@@ -163,8 +163,11 @@ export default function DriverActiveRideScreen() {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
+      let lastEmittedLoc: { lat: number; lng: number } | null = null;
+      let lastEmittedTime = Date.now();
+
       locationSubscription = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 5 },
+        { accuracy: Location.Accuracy.High, distanceInterval: 3 },
         (loc) => {
           const newLocation = {
             latitude: loc.coords.latitude,
@@ -173,11 +176,38 @@ export default function DriverActiveRideScreen() {
           setDriverLoc(newLocation);
 
           if (socket && booking?.driverId) {
+            const newLat = newLocation.latitude;
+            const newLng = newLocation.longitude;
+            const now = Date.now();
+
+            if (lastEmittedLoc) {
+              const R = 6371e3; // meters
+              const phi1 = lastEmittedLoc.lat * Math.PI / 180;
+              const phi2 = newLat * Math.PI / 180;
+              const deltaPhi = (newLat - lastEmittedLoc.lat) * Math.PI / 180;
+              const deltaLambda = (newLng - lastEmittedLoc.lng) * Math.PI / 180;
+
+              const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                        Math.cos(phi1) * Math.cos(phi2) *
+                        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              const distance = R * c;
+              
+              const elapsed = now - lastEmittedTime;
+
+              // Active ride: moved > 6 meters, or moved > 1.5 meters and > 8s elapsed
+              const shouldEmit = distance > 6 || (elapsed > 8000 && distance > 1.5);
+              if (!shouldEmit) return;
+            }
+
             socket.emit('driver:location', {
               driverId: booking.driverId,
-              lat: newLocation.latitude,
-              lng: newLocation.longitude
+              lat: newLat,
+              lng: newLng
             });
+
+            lastEmittedLoc = { lat: newLat, lng: newLng };
+            lastEmittedTime = now;
           }
         }
       );

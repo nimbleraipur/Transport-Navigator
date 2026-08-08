@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "342555553431",
+    "project_id": "my-load-24-664af",
+    "storage_bucket": "my-load-24-664af.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:342555553431:android:adce185ae6fed6546703d2",
+        "android_client_info": {
+          "package_name": "com.nimble.myload24"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcwiDIgZN6p5K-rCMaR3F4DZG28WfSW40"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:342555553431:android:3476016e975cc3bd6703d2",
+        "android_client_info": {
+          "package_name": "com.nimble.myload24.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcwiDIgZN6p5K-rCMaR3F4DZG28WfSW40"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

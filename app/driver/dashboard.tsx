@@ -11,7 +11,13 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Modal,
+  AppState,
+  AppStateStatus,
+  NativeModules,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
+const { OverlayPermission } = NativeModules;
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +31,7 @@ import { getApiUrl } from '@/lib/query-client';
 import { getVehicleImageSource } from '@/lib/vehicles';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
-import { useBookingSound } from '@/lib/useBookingSound';
+import { IncomingRequestModal } from '@/components/IncomingRequestModal';
 
 function AnimatedStatCard({
   index,
@@ -274,37 +280,124 @@ export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, token, refreshUser } = useAuth();
-  const { bookings, fetchBookings, getActiveBooking, checkOperationalAvailability } = useBookings();
+  const { bookings, fetchBookings, getActiveBooking, checkOperationalAvailability, acceptBooking } = useBookings();
   const { unreadCount } = useNotifications();
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const isFocused = useIsFocused();
 
-  // Sound and Popup Notification logic for Online Driver
-  const { playBookingAlert, stopBookingAlert } = useBookingSound();
-  const [newRequest, setNewRequest] = useState<any | null>(null);
-  const slideAnim = useRef(new Animated.Value(-200)).current;
-  const timeoutRef = useRef<any>(null);
+  // Permissions Modal state
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [permissionStates, setPermissionStates] = useState({
+    notifications: false,
+    overlay: false,
+    battery: false,
+  });
 
-  const hideRequestPopup = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+  const checkAllPermissions = async (): Promise<{ notifications: boolean; overlay: boolean; battery: boolean }> => {
+    if (Platform.OS !== 'android') {
+      return { notifications: true, overlay: true, battery: true };
     }
-    stopBookingAlert();
-    Animated.timing(slideAnim, {
-      toValue: -200,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setNewRequest(null);
+
+    let notificationsGranted = false;
+    let overlayGranted = false;
+    let batteryGranted = false;
+
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      notificationsGranted = (status === 'granted');
+    } catch (e) {
+      console.error('[PERMISSIONS] Error checking notification:', e);
+    }
+
+    try {
+      if (OverlayPermission && OverlayPermission.canDrawOverlays) {
+        overlayGranted = await OverlayPermission.canDrawOverlays();
+      } else {
+        overlayGranted = true;
+      }
+    } catch (e) {
+      console.error('[PERMISSIONS] Error checking overlay:', e);
+      overlayGranted = true;
+    }
+
+    try {
+      if (OverlayPermission && OverlayPermission.isBatteryOptimizationIgnored) {
+        batteryGranted = await OverlayPermission.isBatteryOptimizationIgnored();
+      } else {
+        batteryGranted = true;
+      }
+    } catch (e) {
+      console.error('[PERMISSIONS] Error checking battery:', e);
+      batteryGranted = true;
+    }
+
+    const newStates = {
+      notifications: notificationsGranted,
+      overlay: overlayGranted,
+      battery: batteryGranted,
+    };
+    setPermissionStates(newStates);
+    return newStates;
+  };
+
+  const requestNotificationPermission = async () => {
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      setPermissionStates(prev => ({ ...prev, notifications: status === 'granted' }));
+    } catch (e) {
+      console.error('[PERMISSIONS] Error requesting notifications:', e);
+    }
+  };
+
+  const requestOverlayPermission = async () => {
+    try {
+      if (OverlayPermission && OverlayPermission.requestOverlayPermission) {
+        await OverlayPermission.requestOverlayPermission();
+      } else {
+        Alert.alert('Unsupported', 'Overlay settings cannot be opened.');
+      }
+    } catch (e) {
+      console.error('[PERMISSIONS] Error requesting overlay:', e);
+    }
+  };
+
+  const requestBatteryPermission = async () => {
+    try {
+      if (OverlayPermission && OverlayPermission.requestIgnoreBatteryOptimizations) {
+        await OverlayPermission.requestIgnoreBatteryOptimizations();
+      } else {
+        Alert.alert('Unsupported', 'Battery saver settings cannot be opened.');
+      }
+    } catch (e) {
+      console.error('[PERMISSIONS] Error requesting battery optimizations:', e);
+    }
+  };
+
+  // Monitor AppState to re-check permissions when user returns to app
+  useEffect(() => {
+    if (!showPermissionModal) return;
+
+    checkAllPermissions();
+
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        checkAllPermissions();
+      }
     });
-  }, [slideAnim, stopBookingAlert]);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [showPermissionModal]);
+
+  // Sound and Popup Notification logic for Online Driver
+  const [newRequest, setNewRequest] = useState<any | null>(null);
 
   useEffect(() => {
     if (!isFocused) {
-      hideRequestPopup();
+      setNewRequest(null);
     }
-  }, [isFocused, hideRequestPopup]);
+  }, [isFocused]);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
@@ -375,23 +468,7 @@ export default function DriverDashboardScreen() {
             return;
           }
           console.log('[SOCKET] New request arrived on dashboard:', data.booking.id);
-          playBookingAlert();
           setNewRequest(data.booking);
-          
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-          }
-          
-          Animated.spring(slideAnim, {
-            toValue: 20,
-            useNativeDriver: true,
-            tension: 80,
-            friction: 8,
-          }).start();
-
-          timeoutRef.current = setTimeout(() => {
-            hideRequestPopup();
-          }, 30000);
         });
 
         // Get initial position
@@ -405,20 +482,57 @@ export default function DriverDashboardScreen() {
           });
         }
 
+        const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+          const R = 6371e3; // meters
+          const phi1 = lat1 * Math.PI / 180;
+          const phi2 = lat2 * Math.PI / 180;
+          const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+          const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+          const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                    Math.cos(phi1) * Math.cos(phi2) *
+                    Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+          return R * c;
+        };
+
+        let lastEmittedLoc = currentLoc ? { lat: currentLoc.coords.latitude, lng: currentLoc.coords.longitude } : null;
+        let lastEmittedTime = Date.now();
+
         locationSubscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
-            timeInterval: 10000,
-            distanceInterval: 10,
+            timeInterval: 5000,
+            distanceInterval: 5,
           },
           (newLocation) => {
             if (socket) {
-              console.log('[TRACKING] Emitting location update:', newLocation.coords.latitude, newLocation.coords.longitude);
+              const newLat = newLocation.coords.latitude;
+              const newLng = newLocation.coords.longitude;
+              const now = Date.now();
+
+              if (lastEmittedLoc) {
+                const distance = getDistanceInMeters(lastEmittedLoc.lat, lastEmittedLoc.lng, newLat, newLng);
+                const elapsed = now - lastEmittedTime;
+
+                // Emit if: moved > 12 meters, or moved > 2 meters and > 15s elapsed
+                const shouldEmit = distance > 12 || (elapsed > 15000 && distance > 2);
+                
+                if (!shouldEmit) {
+                  return;
+                }
+              }
+
+              console.log('[TRACKING] Emitting location update:', newLat, newLng);
               socket.emit('driver:location', {
                 driverId: user.id,
-                lat: newLocation.coords.latitude,
-                lng: newLocation.coords.longitude
+                lat: newLat,
+                lng: newLng
               });
+
+              lastEmittedLoc = { lat: newLat, lng: newLng };
+              lastEmittedTime = now;
             }
           }
         );
@@ -431,47 +545,14 @@ export default function DriverDashboardScreen() {
 
     return () => {
       if (locationSubscription) locationSubscription.remove();
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      stopBookingAlert();
       if (socket) {
         socket.emit('driver:offline', { driverId: user.id });
         socket.disconnect();
       }
     };
-  }, [user?.isOnline, token, stopBookingAlert]);
+  }, [user?.isOnline, token]);
 
-  const handleToggleOnline = async () => {
-    if (isTogglingOnline) return;
-    
-    // If turning online, check location first
-    if (!user?.isOnline) {
-      setIsTogglingOnline(true);
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission Denied', 'Please allow location access to go online.');
-          setIsTogglingOnline(false);
-          return;
-        }
-
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
-        
-        if (cityCheck.error) {
-          Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
-          setIsTogglingOnline(false);
-          return;
-        }
-      } catch (e) {
-        console.error('Location Check Error:', e);
-        // Fallback or just continue if check fails? 
-        // Better to be safe and allow if it's an error on our side?
-        // User said: "dikhe ki we are not available".
-      }
-    }
-
+  const proceedToggleOnline = async () => {
     setIsTogglingOnline(true);
     try {
       const baseUrl = getApiUrl();
@@ -496,6 +577,65 @@ export default function DriverDashboardScreen() {
     } finally {
       setIsTogglingOnline(false);
     }
+  };
+
+  const handleModalGoOnline = async () => {
+    setShowPermissionModal(false);
+    
+    // Re-verify location and availability
+    setIsTogglingOnline(true);
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
+      
+      if (cityCheck.error) {
+        Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
+        setIsTogglingOnline(false);
+        return;
+      }
+    } catch (e) {
+      console.error('Location Check Error:', e);
+    }
+
+    await proceedToggleOnline();
+  };
+
+  const handleToggleOnline = async () => {
+    if (isTogglingOnline) return;
+    
+    // If turning online, check location first
+    if (!user?.isOnline) {
+      setIsTogglingOnline(true);
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Please allow location access to go online.');
+          setIsTogglingOnline(false);
+          return;
+        }
+
+        // Check if other Android permissions (Notifications, Overlay, Battery optimization) are missing
+        const states = await checkAllPermissions();
+        if (!states.notifications || !states.overlay || !states.battery) {
+          setShowPermissionModal(true);
+          setIsTogglingOnline(false);
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
+        
+        if (cityCheck.error) {
+          Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
+          setIsTogglingOnline(false);
+          return;
+        }
+      } catch (e) {
+        console.error('Location Check Error:', e);
+      }
+    }
+
+    await proceedToggleOnline();
   };
 
   const getVehicleIcon = (type: string) => {
@@ -668,67 +808,159 @@ export default function DriverDashboardScreen() {
         )}
       </ScrollView>
 
-      {/* Real-time New Ride Request Floating Banner */}
+      {/* Real-time New Ride Request Modal Overlay */}
       {newRequest && (
-        <Animated.View
-          style={[
-            {
-              position: 'absolute',
-              top: topInset,
-              left: 16,
-              right: 16,
-              zIndex: 9999,
-              transform: [{ translateY: slideAnim }],
+        <IncomingRequestModal
+          request={newRequest}
+          onDecline={() => setNewRequest(null)}
+          onAccept={async () => {
+            const bookingId = newRequest.id;
+            try {
+              const result = await acceptBooking(bookingId);
+              if (result.success) {
+                setNewRequest(null);
+                router.push(`/driver/active-ride?bookingId=${bookingId}` as any);
+              } else {
+                Alert.alert('Booking Unsuccessful', result.error || 'This ride is no longer available');
+              }
+            } catch (e) {
+              Alert.alert('Error', 'Something went wrong while accepting the ride');
             }
-          ]}
-          className="bg-surface rounded-2xl p-4 shadow-2xl border border-primary/20 flex-row items-center justify-between"
-        >
-          {/* Ride Details (Pickup, Drop, Price) */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            className="flex-1 mr-3"
-            onPress={() => {
-              hideRequestPopup();
-              router.push('/driver/requests' as any);
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-2">
-              <Text className="text-[10px] font-inter-bold text-primary uppercase tracking-widest bg-primary/10 px-2 py-0.5 rounded">
-                New Ride Request
-              </Text>
-              <Text className="text-base font-inter-bold text-text">₹{newRequest.totalPrice}</Text>
-            </View>
-            
-            <View className="space-y-1">
-              <Text className="text-xs font-inter-semibold text-text-secondary" numberOfLines={1}>
-                🟢 From: {newRequest.pickup.name}
-              </Text>
-              <Text className="text-xs font-inter-semibold text-text-secondary" numberOfLines={1}>
-                🔴 To: {newRequest.delivery.name}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Quick Action Buttons */}
-          <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={() => {
-                hideRequestPopup();
-                router.push('/driver/requests' as any);
-              }}
-              className="bg-primary px-3 py-2.5 rounded-xl mr-2"
-            >
-              <Text className="text-xs font-inter-bold text-surface">View</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={hideRequestPopup}
-              className="bg-gray-100 p-2.5 rounded-xl"
-            >
-              <Ionicons name="close" size={18} color={Colors.textTertiary} />
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
+          }}
+        />
       )}
+
+      {/* Custom Permissions Modal */}
+      <Modal
+        visible={showPermissionModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPermissionModal(false)}
+      >
+        <View className="flex-1 justify-end bg-black/60">
+          <View className="bg-surface rounded-t-[32px] p-6 pb-8 border-t border-gray-100 shadow-2xl">
+            <View className="w-12 h-1 bg-gray-200 rounded-full align-self-center mx-auto mb-6" />
+            
+            <View className="items-center mb-6">
+              <View className="w-14 h-14 bg-primary/10 rounded-full items-center justify-center mb-3">
+                <MaterialCommunityIcons name="shield-check-outline" size={32} color={Colors.primary} />
+              </View>
+              <Text className="text-xl font-inter-bold text-text text-center">Permissions Required</Text>
+              <Text className="text-xs font-inter-medium text-text-tertiary text-center mt-1 px-4">
+                Rides and requests receive karne ke liye niche di gayi permissions ko step-by-step enable karein:
+              </Text>
+            </View>
+
+            {/* Step 1: Notifications */}
+            <View className="flex-row items-center justify-between bg-gray-50/60 p-4 rounded-2xl border border-gray-100 mb-3">
+              <View className="flex-row items-center flex-1 mr-4">
+                <View className={`w-10 h-10 rounded-xl items-center justify-center mr-3 ${permissionStates.notifications ? 'bg-success/10' : 'bg-primary/10'}`}>
+                  <Ionicons name="notifications" size={20} color={permissionStates.notifications ? '#10B981' : Colors.primary} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-inter-bold text-text">Notification Permission</Text>
+                  <Text className="text-[11px] font-inter-medium text-text-tertiary mt-0.5">
+                    Ride alerts aur sounds ke liye ise enable karein.
+                  </Text>
+                </View>
+              </View>
+              {permissionStates.notifications ? (
+                <View className="flex-row items-center bg-success/15 px-3 py-1.5 rounded-xl border border-success/10">
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <Text className="text-[10px] font-inter-bold text-success ml-1 uppercase">Allowed</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={requestNotificationPermission}
+                  className="bg-primary px-4 py-2 rounded-xl"
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-xs font-inter-bold text-surface">Enable</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Step 2: Overlay / Draw Over Apps */}
+            <View className="flex-row items-center justify-between bg-gray-50/60 p-4 rounded-2xl border border-gray-100 mb-3">
+              <View className="flex-row items-center flex-1 mr-4">
+                <View className={`w-10 h-10 rounded-xl items-center justify-center mr-3 ${permissionStates.overlay ? 'bg-success/10' : 'bg-primary/10'}`}>
+                  <MaterialCommunityIcons name="card-bulleted-outline" size={20} color={permissionStates.overlay ? '#10B981' : Colors.primary} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-inter-bold text-text">Display Over Other Apps</Text>
+                  <Text className="text-[11px] font-inter-medium text-text-tertiary mt-0.5">
+                    Google Maps use karte waqt bhi rides popup ho sakein.
+                  </Text>
+                </View>
+              </View>
+              {permissionStates.overlay ? (
+                <View className="flex-row items-center bg-success/15 px-3 py-1.5 rounded-xl border border-success/10">
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <Text className="text-[10px] font-inter-bold text-success ml-1 uppercase">Allowed</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={requestOverlayPermission}
+                  className="bg-primary px-4 py-2 rounded-xl"
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-xs font-inter-bold text-surface">Enable</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Step 3: Battery Saver optimization */}
+            <View className="flex-row items-center justify-between bg-gray-50/60 p-4 rounded-2xl border border-gray-100 mb-6">
+              <View className="flex-row items-center flex-1 mr-4">
+                <View className={`w-10 h-10 rounded-xl items-center justify-center mr-3 ${permissionStates.battery ? 'bg-success/10' : 'bg-primary/10'}`}>
+                  <Ionicons name="battery-charging" size={20} color={permissionStates.battery ? '#10B981' : Colors.primary} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-inter-bold text-text">Disable Battery Saver</Text>
+                  <Text className="text-[11px] font-inter-medium text-text-tertiary mt-0.5">
+                    Background connectivity bani rahe aur duty off na ho.
+                  </Text>
+                </View>
+              </View>
+              {permissionStates.battery ? (
+                <View className="flex-row items-center bg-success/15 px-3 py-1.5 rounded-xl border border-success/10">
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <Text className="text-[10px] font-inter-bold text-success ml-1 uppercase">Allowed</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={requestBatteryPermission}
+                  className="bg-primary px-4 py-2 rounded-xl"
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-xs font-inter-bold text-surface">Enable</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Bottom Actions */}
+            <View className="flex-row items-center mt-2">
+              <TouchableOpacity
+                onPress={() => setShowPermissionModal(false)}
+                className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center justify-center mr-3"
+                activeOpacity={0.7}
+              >
+                <Text className="text-sm font-inter-bold text-text-secondary">Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                onPress={handleModalGoOnline}
+                disabled={!(permissionStates.notifications && permissionStates.overlay && permissionStates.battery)}
+                style={{ opacity: (permissionStates.notifications && permissionStates.overlay && permissionStates.battery) ? 1 : 0.5 }}
+                className="flex-1 bg-accent py-3.5 rounded-2xl items-center justify-center"
+                activeOpacity={0.8}
+              >
+                <Text className="text-sm font-inter-bold text-surface">Go Online</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

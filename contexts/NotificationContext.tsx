@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, React
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/query-client';
 
@@ -20,6 +21,79 @@ try {
   });
 } catch (error) {
   console.warn('Expo Notifications module failed to load:', error);
+}
+
+let TaskManager: any = null;
+try {
+  TaskManager = require('expo-task-manager');
+} catch (error) {
+  console.warn('Expo Task Manager module failed to load:', error);
+}
+
+let notifee: any = null;
+try {
+  notifee = require('@notifee/react-native').default;
+} catch (error) {
+  console.warn('Notifee module failed to load:', error);
+}
+
+const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND-NOTIFICATION-TASK';
+
+if (TaskManager && Notifications) {
+  try {
+    TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }: any) => {
+      if (error) {
+        console.error('[BACKGROUND-TASK] Error in background task:', error);
+        return;
+      }
+      if (data) {
+        const { notification } = data;
+        console.log('[BACKGROUND-TASK] Received notification in background:', notification);
+        const payload = notification?.request?.content?.data;
+        if (payload?.type === 'new_booking' && payload?.bookingId) {
+          console.log('[BACKGROUND-TASK] Intercepted new_booking background push. Launching full screen intent.');
+          
+          try {
+            if (notifee) {
+              const soundName = (payload.sound || 'new_booking').replace(/\.mp3$/, '');
+              const titleText = payload.title || notification?.request?.content?.title || 'New Ride Request! 🚚';
+              const bodyText = payload.body || notification?.request?.content?.body || 'A customer is looking for a ride nearby.';
+
+              const channelId = await notifee.createChannel({
+                id: payload.channelId || 'new-booking-channel',
+                name: 'New Booking Requests',
+                importance: 4, // AndroidImportance.HIGH
+                sound: soundName,
+              });
+
+              await notifee.displayNotification({
+                title: titleText,
+                body: bodyText,
+                data: payload,
+                android: {
+                  channelId,
+                  importance: 4, // AndroidImportance.HIGH
+                  sound: soundName,
+                  pressAction: {
+                    id: 'default',
+                    launchActivity: 'default',
+                  },
+                  fullScreenAction: {
+                    id: 'default',
+                    launchActivity: 'default',
+                  },
+                },
+              });
+            }
+          } catch (err) {
+            console.error('[BACKGROUND-TASK] Failed to display full screen intent:', err);
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Failed to define BACKGROUND-NOTIFICATION-TASK:', err);
+  }
 }
 
 export interface NotificationItem {
@@ -82,6 +156,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const responseSubscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const { title, body, data } = response.notification.request.content;
       console.log('[PUSH-CLICKED] User clicked notification:', title, data);
+      
+      try {
+        if (data?.type === 'new_booking' || data?.bookingId) {
+          if (user?.role === 'driver') {
+            router.push('/driver/requests');
+          } else if (data?.bookingId) {
+            router.push(`/customer/track-ride?bookingId=${data.bookingId}`);
+          }
+        }
+      } catch (err) {
+        console.error('Error navigating on notification tap:', err);
+      }
     });
 
     return () => {
@@ -112,6 +198,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const pushToken = tokenResult.data;
       console.log('[PUSH-TOKEN] Acquired Expo Push Token:', pushToken);
 
+      // Register background notification task
+      if (TaskManager) {
+        try {
+          const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
+          if (!isRegistered) {
+            await Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+            console.log('[BACKGROUND-TASK] Registered background task successfully');
+          }
+        } catch (e) {
+          console.warn('[BACKGROUND-TASK] Failed to register background task:', e);
+        }
+      }
+
+      // Initialize Notifee permissions
+      if (notifee) {
+        try {
+          await notifee.requestPermission();
+        } catch (e) {
+          console.warn('[NOTIFEE] Failed to request permission:', e);
+        }
+      }
+
       if (pushToken && token) {
         const baseUrl = getApiUrl();
         const res = await fetch(new URL('/api/users/profile', baseUrl).toString(), {
@@ -135,6 +243,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
+        });
+
+        await Notifications.setNotificationChannelAsync('new-booking-channel', {
+          name: 'New Booking Requests',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+          sound: 'new_booking.mp3',
         });
       }
     } catch (e) {

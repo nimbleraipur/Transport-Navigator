@@ -226,6 +226,7 @@ export default function NewBookingScreen() {
   const [activeField, setActiveField] = useState<'pickup' | 'delivery' | null>(null);
   const [pickupSearch, setPickupSearch] = useState('');
   const [deliverySearch, setDeliverySearch] = useState('');
+  const activeQuery = activeField === 'pickup' ? pickupSearch : (activeField === 'delivery' ? deliverySearch : '');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const { vehicles, fetchVehicles, checkOperationalAvailability } = useBookings();
@@ -710,11 +711,11 @@ export default function NewBookingScreen() {
               <View className="flex-row items-center flex-1">
                 <View className="h-[1px] flex-1 bg-gray-100" />
                 <Text className="mx-4 text-[9px] font-inter-bold text-text-tertiary uppercase tracking-widest">
-                  {(pickupSearch.length < 3 && deliverySearch.length < 3 && recentLocations.length > 0) ? 'Recent Searches' : 'Suggestions'}
+                  {(activeQuery.length < 3 && recentLocations.length > 0) ? 'Recent Searches' : 'Suggestions'}
                 </Text>
                 <View className="h-[1px] flex-1 bg-gray-100" />
               </View>
-              {(pickupSearch.length < 3 && deliverySearch.length < 3 && recentLocations.length > 0) && (
+              {(activeQuery.length < 3 && recentLocations.length > 0) && (
                 <TouchableOpacity onPress={clearRecentLocations} className="ml-2 px-2 py-1 bg-gray-50 rounded-lg border border-gray-100">
                   <Text className="text-[9px] font-inter-bold text-danger uppercase tracking-wider">Clear</Text>
                 </TouchableOpacity>
@@ -725,7 +726,7 @@ export default function NewBookingScreen() {
           <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {isSearching ? (
               <ActivityIndicator className="mt-10" color={Colors.primary} />
-            ) : (pickupSearch.length < 3 && deliverySearch.length < 3) ? (
+            ) : (activeQuery.length < 3) ? (
               recentLocations.length > 0 ? (
                 recentLocations.map((loc, i) => (
                   <LocationSearchItem

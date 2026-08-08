@@ -15,6 +15,7 @@ import {
   AppState,
   AppStateStatus,
   NativeModules,
+  Linking,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 const { OverlayPermission } = NativeModules;
@@ -313,11 +314,11 @@ export default function DriverDashboardScreen() {
       if (OverlayPermission && OverlayPermission.canDrawOverlays) {
         overlayGranted = await OverlayPermission.canDrawOverlays();
       } else {
-        overlayGranted = true;
+        overlayGranted = false;
       }
     } catch (e) {
       console.error('[PERMISSIONS] Error checking overlay:', e);
-      overlayGranted = true;
+      overlayGranted = false;
     }
 
     try {
@@ -354,10 +355,11 @@ export default function DriverDashboardScreen() {
       if (OverlayPermission && OverlayPermission.requestOverlayPermission) {
         await OverlayPermission.requestOverlayPermission();
       } else {
-        Alert.alert('Unsupported', 'Overlay settings cannot be opened.');
+        await Linking.openSettings();
       }
     } catch (e) {
       console.error('[PERMISSIONS] Error requesting overlay:', e);
+      await Linking.openSettings();
     }
   };
 
@@ -366,10 +368,11 @@ export default function DriverDashboardScreen() {
       if (OverlayPermission && OverlayPermission.requestIgnoreBatteryOptimizations) {
         await OverlayPermission.requestIgnoreBatteryOptimizations();
       } else {
-        Alert.alert('Unsupported', 'Battery saver settings cannot be opened.');
+        await Linking.openSettings();
       }
     } catch (e) {
       console.error('[PERMISSIONS] Error requesting battery optimizations:', e);
+      await Linking.openSettings();
     }
   };
 

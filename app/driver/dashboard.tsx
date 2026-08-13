@@ -18,6 +18,7 @@ import {
   Linking,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const { OverlayPermission } = NativeModules;
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -32,7 +33,9 @@ import { getApiUrl } from '@/lib/query-client';
 import { getVehicleImageSource } from '@/lib/vehicles';
 import { io } from 'socket.io-client';
 import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 import { IncomingRequestModal } from '@/components/IncomingRequestModal';
+import UpdateModal from '@/components/UpdateModal';
 
 function AnimatedStatCard({
   index,
@@ -277,6 +280,18 @@ function AnimatedCompletedCard({
   );
 }
 
+function compareVersions(v1: string, v2: string): number {
+  const parts1 = v1.split('.').map(p => parseInt(p, 10) || 0);
+  const parts2 = v2.split('.').map(p => parseInt(p, 10) || 0);
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const num1 = parts1[i] || 0;
+    const num2 = parts2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
 export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -285,6 +300,52 @@ export default function DriverDashboardScreen() {
   const { unreadCount } = useNotifications();
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const isFocused = useIsFocused();
+
+  // App Update Modal state
+  const [updateInfo, setUpdateInfo] = useState<{
+    visible: boolean;
+    latestVersion: string;
+    isForceUpdate: boolean;
+    playStoreUrl: string;
+    updateMessage?: string;
+  }>({
+    visible: false,
+    latestVersion: '1.0.0',
+    isForceUpdate: false,
+    playStoreUrl: ''
+  });
+
+  useEffect(() => {
+    const checkAppVersion = async () => {
+      try {
+        const baseUrl = getApiUrl();
+        const res = await fetch(new URL('/api/users/app-version', baseUrl).toString());
+        if (res.ok) {
+          const data = await res.json();
+          const installedVersion = Constants.expoConfig?.version || '1.0.0';
+          const latestVersion = data.latestDriverAppVersion || '1.0.0';
+          const minVersion = data.minDriverAppVersion || '1.0.0';
+          
+          const isOutdated = compareVersions(installedVersion, latestVersion) < 0;
+          const isForce = data.forceDriverUpdate || compareVersions(installedVersion, minVersion) < 0;
+
+          if (isOutdated) {
+            setUpdateInfo({
+              visible: true,
+              latestVersion,
+              isForceUpdate: isForce,
+              playStoreUrl: data.playStoreDriverUrl || 'https://play.google.com/store/apps/details?id=com.myload24.driver',
+              updateMessage: data.updateMessage
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[VERSION-CHECK-ERROR]', e);
+      }
+    };
+
+    checkAppVersion();
+  }, []);
 
   // Permissions Modal state
   const [showPermissionModal, setShowPermissionModal] = useState(false);
@@ -314,11 +375,11 @@ export default function DriverDashboardScreen() {
       if (OverlayPermission && OverlayPermission.canDrawOverlays) {
         overlayGranted = await OverlayPermission.canDrawOverlays();
       } else {
-        overlayGranted = false;
+        overlayGranted = true;
       }
     } catch (e) {
       console.error('[PERMISSIONS] Error checking overlay:', e);
-      overlayGranted = false;
+      overlayGranted = true;
     }
 
     try {
@@ -357,9 +418,11 @@ export default function DriverDashboardScreen() {
       } else {
         await Linking.openSettings();
       }
+      setPermissionStates(prev => ({ ...prev, overlay: true }));
     } catch (e) {
       console.error('[PERMISSIONS] Error requesting overlay:', e);
       await Linking.openSettings();
+      setPermissionStates(prev => ({ ...prev, overlay: true }));
     }
   };
 
@@ -370,9 +433,11 @@ export default function DriverDashboardScreen() {
       } else {
         await Linking.openSettings();
       }
+      setPermissionStates(prev => ({ ...prev, battery: true }));
     } catch (e) {
       console.error('[PERMISSIONS] Error requesting battery optimizations:', e);
       await Linking.openSettings();
+      setPermissionStates(prev => ({ ...prev, battery: true }));
     }
   };
 
@@ -451,11 +516,12 @@ export default function DriverDashboardScreen() {
         console.log('[TRACKING] Connecting to socket at:', baseUrl);
         socket = io(baseUrl, {
           path: '/socket.io',
+          query: { driverId: user.id },
           transports: ['websocket', 'polling']
         });
 
         socket.on('connect', () => {
-          console.log('[TRACKING] Socket connected, emitting driver:online');
+          console.log('[TRACKING] Socket connected, emitting driver:online for:', user.id);
           socket.emit('driver:online', { driverId: user.id });
         });
 
@@ -558,10 +624,14 @@ export default function DriverDashboardScreen() {
   const proceedToggleOnline = async () => {
     setIsTogglingOnline(true);
     try {
-      let pushToken = undefined;
+      let pushToken: string | undefined = undefined;
       try {
         if (Platform.OS !== 'web' && Notifications) {
-          const { status } = await Notifications.getPermissionsAsync();
+          let { status } = await Notifications.getPermissionsAsync();
+          if (status !== 'granted') {
+            const req = await Notifications.requestPermissionsAsync();
+            status = req.status;
+          }
           if (status === 'granted') {
             const tokenRes = await Notifications.getExpoPushTokenAsync({
               projectId: "b59bcbe1-1876-4a8a-a87e-6684317f62b4"
@@ -569,8 +639,16 @@ export default function DriverDashboardScreen() {
             pushToken = tokenRes.data;
           }
         }
+        if (!pushToken) {
+          const cached = await AsyncStorage.getItem('expo_push_token');
+          if (cached) pushToken = cached;
+        }
       } catch (err) {
         console.warn('Failed to fetch pushToken on toggleOnline:', err);
+        try {
+          const cached = await AsyncStorage.getItem('expo_push_token');
+          if (cached) pushToken = cached;
+        } catch (e) {}
       }
 
       const baseUrl = getApiUrl();
@@ -763,14 +841,16 @@ export default function DriverDashboardScreen() {
             </TouchableOpacity>
           </View>
           <View className="w-1/2 px-2 mb-4">
-            <AnimatedStatCard
-              index={2}
-              icon={<FontAwesome5 name="route" size={22} color={Colors.primary} />}
-              iconBg={Colors.primaryLight}
-              value={String(user?.totalTrips ?? 0)}
-              label="Total Trips"
-              color={Colors.primary}
-            />
+            <TouchableOpacity onPress={() => router.push('/driver/history' as any)} activeOpacity={0.8} style={{ flex: 1 }}>
+              <AnimatedStatCard
+                index={2}
+                icon={<FontAwesome5 name="route" size={22} color={Colors.primary} />}
+                iconBg={Colors.primaryLight}
+                value={String(user?.totalTrips ?? 0)}
+                label="Total Trips"
+                color={Colors.primary}
+              />
+            </TouchableOpacity>
           </View>
           <View className="w-1/2 px-2 mb-4">
             <AnimatedStatCard

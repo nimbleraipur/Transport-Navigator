@@ -6,7 +6,7 @@ module.exports = ({ config }) => ({
   owner: "nimbleraipur",
   name: IS_DRIVER ? 'My Load Driver' : 'My Load 24',
   slug: 'md-raza-chouhan', // Must match the project ID on Expo dashboard
-  version: '1.0.6',
+  version: '1.0.7',
   orientation: 'portrait',
   icon: IS_DRIVER ? './assets/images/Myload_Driver.png' : './assets/images/icon.png',
   scheme: IS_DRIVER ? 'myload24driver' : 'myload24',
@@ -28,7 +28,7 @@ module.exports = ({ config }) => ({
   android: {
     package: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
     googleServicesFile: IS_DRIVER ? './google-services-driver.json' : './google-services-customer.json',
-    versionCode: 13,
+    versionCode: 14,
     permissions: [
       "CAMERA",
       "READ_EXTERNAL_STORAGE",

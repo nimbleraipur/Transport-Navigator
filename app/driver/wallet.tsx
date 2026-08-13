@@ -1,25 +1,123 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Linking, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Linking, Platform, RefreshControl, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { getApiUrl } from '@/lib/query-client';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import io from 'socket.io-client';
+
+export interface WalletTransactionItem {
+    _id: string;
+    type: 'credit' | 'debit';
+    amount: number;
+    balanceAfter: number;
+    category: 'admin_recharge' | 'trip_earning' | 'commission_deduction' | 'manual_adjustment';
+    description: string;
+    referenceId?: string;
+    createdByName?: string;
+    createdAt: string;
+}
 
 export default function WalletScreen() {
-    const { user } = useAuth();
+    const { user, token, refreshUser } = useAuth();
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
+    const [transactions, setTransactions] = useState<WalletTransactionItem[]>([]);
+    const [settings, setSettings] = useState<{ minWalletBalance: number; commissionPercentage: number }>({
+        minWalletBalance: 100,
+        commissionPercentage: 5
+    });
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const loadWalletData = useCallback(async () => {
+        if (!token) return;
+        try {
+            const baseUrl = getApiUrl();
+            
+            // 1. Fetch system settings (min balance, commission %)
+            try {
+                const settingsRes = await fetch(new URL('/api/users/settings', baseUrl).toString(), {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (settingsRes.ok) {
+                    const data = await settingsRes.json();
+                    if (data.settings) setSettings(data.settings);
+                }
+            } catch (e) {
+                console.warn('[WALLET-SCREEN] Failed to load settings:', e);
+            }
+
+            // 2. Fetch wallet transaction history
+            try {
+                const txRes = await fetch(new URL('/api/users/wallet/transactions', baseUrl).toString(), {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (txRes.ok) {
+                    const data = await txRes.json();
+                    if (data.transactions) setTransactions(data.transactions);
+                }
+            } catch (e) {
+                console.warn('[WALLET-SCREEN] Failed to load transactions:', e);
+            }
+
+            await refreshUser();
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [token, refreshUser]);
+
+    useEffect(() => {
+        loadWalletData();
+    }, [loadWalletData]);
+
+    // Socket listener for instant balance & ledger updates
+    useEffect(() => {
+        if (!user?.id) return;
+        const baseUrl = getApiUrl();
+        const socket = io(baseUrl, { query: { driverId: user.id } });
+
+        socket.on('wallet:updated', () => {
+            console.log('[WALLET-SOCKET] Received wallet:updated event — refreshing data');
+            loadWalletData();
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [user?.id, loadWalletData]);
+
+    const handleRefresh = () => {
+        setRefreshing(true);
+        loadWalletData();
+    };
+
     const handleCallSupport = () => {
-        // Support number for offline recharge
         Linking.openURL('tel:7354647786');
     };
 
     const handleOnlineRecharge = () => {
-        // Placeholder for future payment gateway integration
-        alert('Online recharge will be available soon. Please use the offline method for now.');
+        alert('Online instant recharge will be available soon. Please use Offline Recharge / Support call for instant top-up.');
+    };
+
+    const formatDate = (isoString: string) => {
+        try {
+            const d = new Date(isoString);
+            return d.toLocaleString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (e) {
+            return isoString;
+        }
     };
 
     return (
@@ -37,7 +135,12 @@ export default function WalletScreen() {
                         <Ionicons name="chevron-back" size={24} color="#FFF" />
                     </TouchableOpacity>
                     <Text className="text-xl font-inter-bold text-surface">Driver Wallet</Text>
-                    <View className="w-10" />
+                    <TouchableOpacity 
+                        onPress={handleRefresh} 
+                        className="w-10 h-10 rounded-xl bg-white/10 items-center justify-center border border-white/10"
+                    >
+                        <Ionicons name="refresh" size={20} color="#FFF" />
+                    </TouchableOpacity>
                 </View>
 
                 <View className="items-center">
@@ -47,10 +150,12 @@ export default function WalletScreen() {
                         <Text className="text-6xl font-inter-bold text-surface">{user?.walletBalance ?? 0}</Text>
                     </View>
                     
-                    {(user?.walletBalance ?? 0) < 0 && (
+                    {(user?.walletBalance ?? 0) < settings.minWalletBalance && (
                         <View className="bg-danger/20 px-4 py-2 rounded-xl mt-6 border border-danger/30 flex-row items-center">
                             <Ionicons name="warning" size={16} color="#F87171" className="mr-2" />
-                            <Text className="text-[10px] font-inter-bold text-danger uppercase tracking-tighter">Negative Balance: Account on Hold</Text>
+                            <Text className="text-[10px] font-inter-bold text-danger uppercase tracking-tighter">
+                                {(user?.walletBalance ?? 0) < 0 ? 'Negative Balance: Account on Hold' : `Low Balance: Maintain min ₹${settings.minWalletBalance}`}
+                            </Text>
                         </View>
                     )}
                 </View>
@@ -60,6 +165,9 @@ export default function WalletScreen() {
                 className="flex-1" 
                 contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 40 }}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[Colors.primary]} />
+                }
             >
                 <Text className="text-lg font-inter-bold text-text mb-6 tracking-tight">Add Funds to Wallet</Text>
 
@@ -99,7 +207,7 @@ export default function WalletScreen() {
                     </View>
                 </TouchableOpacity>
 
-                {/* Policy Notice */}
+                {/* Dynamic Policy Guidelines Notice */}
                 <View className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100 mb-8">
                     <View className="flex-row items-start mb-3">
                         <Ionicons name="information-circle-outline" size={22} color="#3B82F6" className="mr-3" />
@@ -107,39 +215,84 @@ export default function WalletScreen() {
                     </View>
                     <View className="space-y-3">
                         <View className="flex-row items-start">
-                            <View className="w-1 h-1 rounded-full bg-blue-400 mt-2 mr-3" />
+                            <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 mr-3" />
                             <Text className="flex-1 text-[11px] font-inter-medium text-blue-700/80 leading-relaxed">
-                                Minimum maintainable balance is ₹100.
+                                Minimum maintainable balance is <Text className="font-inter-bold text-blue-900">₹{settings.minWalletBalance}</Text>.
                             </Text>
                         </View>
                         <View className="flex-row items-start">
-                            <View className="w-1 h-1 rounded-full bg-blue-400 mt-2 mr-3" />
+                            <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 mr-3" />
                             <Text className="flex-1 text-[11px] font-inter-medium text-blue-700/80 leading-relaxed">
                                 Negative balance results in automatic account hold.
                             </Text>
                         </View>
                         <View className="flex-row items-start">
-                            <View className="w-1 h-1 rounded-full bg-blue-400 mt-2 mr-3" />
+                            <View className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 mr-3" />
                             <Text className="flex-1 text-[11px] font-inter-medium text-blue-700/80 leading-relaxed">
-                                System commissions are deducted directly from this balance upon trip completion.
+                                System commission of <Text className="font-inter-bold text-blue-900">{settings.commissionPercentage}%</Text> is deducted directly upon trip completion.
                             </Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Recent Transactions Placeholder */}
+                {/* Dynamic Recent Transactions Activity Ledger */}
                 <View className="flex-row items-center justify-between mb-4 mt-2 px-1">
                     <Text className="text-base font-inter-bold text-text">Recent Activity</Text>
-                    <TouchableOpacity>
-                        <Text className="text-[10px] font-inter-bold text-primary uppercase">View Reports</Text>
-                    </TouchableOpacity>
+                    <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase">Real-Time Ledger</Text>
                 </View>
                 
-                <View className="bg-gray-50/50 p-10 rounded-3xl border border-dashed border-gray-200 items-center">
-                    <MaterialCommunityIcons name="history" size={24} color="#9CA3AF" />
-                    <Text className="text-[11px] font-inter-medium text-text-tertiary mt-3">No recent wallet activity found</Text>
-                </View>
+                {loading && transactions.length === 0 ? (
+                    <View className="bg-gray-50/50 p-8 rounded-3xl border border-gray-100 items-center justify-center">
+                        <ActivityIndicator size="small" color={Colors.primary} />
+                        <Text className="text-[11px] font-inter-medium text-text-tertiary mt-2">Loading transactions...</Text>
+                    </View>
+                ) : transactions.length === 0 ? (
+                    <View className="bg-gray-50/50 p-10 rounded-3xl border border-dashed border-gray-200 items-center">
+                        <MaterialCommunityIcons name="history" size={28} color="#9CA3AF" />
+                        <Text className="text-[11px] font-inter-medium text-text-tertiary mt-3">No recent wallet activity found</Text>
+                    </View>
+                ) : (
+                    <View className="space-y-3">
+                        {transactions.map((tx) => {
+                            const isCredit = tx.type === 'credit';
+                            return (
+                                <View 
+                                    key={tx._id} 
+                                    className="bg-surface p-4 rounded-2xl flex-row items-center justify-between border border-gray-100 shadow-sm"
+                                >
+                                    <View className="flex-row items-center flex-1 mr-3">
+                                        <View className={`w-11 h-11 rounded-xl items-center justify-center mr-3 ${isCredit ? 'bg-emerald-50 border border-emerald-100' : 'bg-rose-50 border border-rose-100'}`}>
+                                            <MaterialCommunityIcons 
+                                                name={isCredit ? 'arrow-bottom-left' : 'arrow-top-right'} 
+                                                size={22} 
+                                                color={isCredit ? '#10B981' : '#F43F5E'} 
+                                            />
+                                        </View>
+                                        <View className="flex-1">
+                                            <Text className="text-xs font-inter-bold text-text font-medium" numberOfLines={1}>
+                                                {tx.description || (isCredit ? 'Credit Entry' : 'Debit Entry')}
+                                            </Text>
+                                            <Text className="text-[10px] font-inter-medium text-text-tertiary mt-0.5">
+                                                {formatDate(tx.createdAt)}
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View className="items-end">
+                                        <Text className={`text-sm font-inter-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            {isCredit ? '+' : '-'} ₹{tx.amount}
+                                        </Text>
+                                        <Text className="text-[9px] font-inter-medium text-text-tertiary mt-0.5">
+                                            Bal: ₹{tx.balanceAfter}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                )}
             </ScrollView>
         </View>
     );
 }
+

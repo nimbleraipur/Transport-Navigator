@@ -198,6 +198,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const pushToken = tokenResult.data;
       console.log('[PUSH-TOKEN] Acquired Expo Push Token:', pushToken);
 
+      if (pushToken) {
+        await AsyncStorage.setItem('expo_push_token', pushToken);
+      }
+
       // Register background notification task
       if (TaskManager) {
         try {
@@ -243,14 +247,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
+          sound: 'default',
         });
 
         await Notifications.setNotificationChannelAsync('new-booking-channel', {
           name: 'New Booking Requests',
           importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
+          vibrationPattern: [0, 500, 250, 500],
           lightColor: '#FF231F7C',
-          sound: 'new_booking.mp3',
+          sound: 'default', // Fallback to system default sound for reliable background alerting
         });
       }
     } catch (e) {

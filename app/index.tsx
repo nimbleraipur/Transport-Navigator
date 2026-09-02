@@ -1,70 +1,38 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Animated, Platform, Alert, KeyboardAvoidingView, ScrollView, ActivityIndicator, Dimensions, Easing, Image, StatusBar, Keyboard } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  Platform,
+  Alert,
+  KeyboardAvoidingView,
+  ScrollView,
+  ActivityIndicator,
+  useWindowDimensions,
+  Easing,
+  Image,
+  StatusBar,
+  Keyboard,
+} from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAppMode, getAppName, getAppSubtitle } from '@/lib/app-config';
-import * as WebBrowser from 'expo-web-browser';
-import { ADMIN_WEB_URL } from '@/constants/config';
-import LAYOUT from '@/constants/layout';
 
 const appLogo = require('@/assets/images/logo.png');
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = LAYOUT.window;
-const PARTICLE_COUNT = 8;
-
-function FloatingParticle({ delay, size, startX, startY }: { delay: number; size: number; startX: number; startY: number }) {
-  const translateY = useRef(new Animated.Value(0)).current;
-  const translateX = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const driftY = 60 + Math.random() * 80;
-    const driftX = 30 + Math.random() * 40;
-    const duration = 5000 + Math.random() * 4000;
-
-    Animated.sequence([
-      Animated.delay(delay),
-      Animated.parallel([
-        Animated.timing(opacity, { toValue: 0.4 + Math.random() * 0.4, duration: 1500, useNativeDriver: true }),
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(translateY, { toValue: -driftY, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(translateY, { toValue: driftY * 0.2, duration: duration * 0.9, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          ])
-        ),
-      ]),
-    ]).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(translateX, { toValue: driftX, duration: duration * 1.3, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(translateX, { toValue: -driftX, duration: duration * 1.3, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-
-  return (
-    <Animated.View
-      className="absolute bg-primary/40 rounded-full"
-      style={{
-        left: startX,
-        top: startY,
-        width: size,
-        height: size,
-        opacity,
-        transform: [{ translateY }, { translateX }],
-      }}
-    />
-  );
-}
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const isSmallScreen = SCREEN_HEIGHT < 680 || SCREEN_WIDTH < 360;
+
   const { user, isAuthenticated, loading: authLoading, sendOtp, verifyOtp, logout } = useAuth();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -74,6 +42,11 @@ export default function LoginScreen() {
   const [resendTimer, setResendTimer] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const timerRef = useRef<any>(null);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const glowPulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (resendTimer > 0) {
@@ -89,44 +62,29 @@ export default function LoginScreen() {
   }, [resendTimer]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, []);
 
-  const logoScale = useRef(new Animated.Value(0.5)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const formSlide = useRef(new Animated.Value(40)).current;
-  const formOpacity = useRef(new Animated.Value(0)).current;
-  const glowPulse = useRef(new Animated.Value(1)).current;
-  const crossfadeAnim = useRef(new Animated.Value(0)).current;
-
-  const particles = useRef(Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
-    id: i,
-    delay: i * 500,
-    size: 2 + Math.random() * 5,
-    startX: Math.random() * SCREEN_WIDTH,
-    startY: Math.random() * SCREEN_HEIGHT * 0.8,
-  }))).current;
-
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.parallel([
-        Animated.timing(logoOpacity, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.spring(logoScale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(formSlide, { toValue: 0, duration: 600, easing: Easing.out(Easing.back(1.1)), useNativeDriver: true }),
-      ]),
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
     ]).start();
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(glowPulse, { toValue: 1.5, duration: 2500, useNativeDriver: true }),
+        Animated.timing(glowPulse, { toValue: 1.3, duration: 2500, useNativeDriver: true }),
         Animated.timing(glowPulse, { toValue: 1, duration: 2500, useNativeDriver: true }),
       ])
     ).start();
@@ -135,16 +93,14 @@ export default function LoginScreen() {
   const currentPath = usePathname();
 
   useEffect(() => {
-    // Only attempt navigation if at root, authenticated and not loading
     if (currentPath === '/' && !authLoading && isAuthenticated && user) {
       const timeoutId = setTimeout(() => {
-        // Strict Role Check: Ensure user is in the correct app
         if (user.role !== 'admin' && user.role !== appMode) {
           Alert.alert(
             'Wrong Application',
-            `Your account is registered as a ${user.role.toUpperCase()}. Please open the ${user.role.toUpperCase()} version of our app to continue.`
+            `Your account is registered as a ${user.role.toUpperCase()}. Please open the ${user.role.toUpperCase()} app.`
           );
-          logout(); // Clear session if trying to access wrong app
+          logout();
           return;
         }
 
@@ -159,246 +115,457 @@ export default function LoginScreen() {
   }, [authLoading, isAuthenticated, user, appMode, currentPath]);
 
   const handleSendOtp = async () => {
-    if (phone.length < 10) {
-      Alert.alert('Invalid Number', 'Please enter a 10-digit mobile number');
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length < 10) {
+      Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number.');
       return;
     }
     setLoading(true);
-    const result = await sendOtp(phone);
+    const result = await sendOtp(clean);
     setLoading(false);
     if (result.success) {
       setOtpSent(true);
       setResendTimer(30);
-      Animated.timing(crossfadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     } else {
-      Alert.alert('Error', result.error || 'Failed to send OTP');
+      Alert.alert('Error', result.error || 'Failed to send OTP. Please try again.');
     }
   };
 
   const handleVerifyOtp = async () => {
     if (otp.length !== 4) {
-      Alert.alert('Invalid OTP', 'Please enter the 4-digit code');
+      Alert.alert('Invalid OTP', 'Please enter the 4-digit code sent to your phone.');
       return;
     }
     setLoading(true);
-    const result = await verifyOtp(phone, otp, appMode);
+    const result = await verifyOtp(phone.replace(/\D/g, ''), otp, appMode);
     setLoading(false);
-    if (result.success) {
-      // Navigation handled by auth effect
-    } else {
-      Alert.alert('Invalid Code', result.error || 'The OTP you entered is incorrect');
+    if (!result.success) {
+      Alert.alert('Verification Error', result.error || 'The OTP code is incorrect.');
     }
   };
 
   const backToPhone = () => {
-    Animated.timing(crossfadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-      setOtpSent(false);
-      setOtp('');
-    });
+    setOtpSent(false);
+    setOtp('');
   };
 
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-[#081220]">
-        <ActivityIndicator size="large" color={Colors.primary} />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
       </View>
     );
   }
 
-  const phoneOpacity = crossfadeAnim.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0] });
-  const otpOpacity = crossfadeAnim.interpolate({ inputRange: [0.5, 1], outputRange: [0, 1] });
-  const phoneTranslateX = crossfadeAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -50] });
-  const otpTranslateX = crossfadeAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] });
+  // Responsive sizes
+  const logoSize = keyboardVisible ? (isSmallScreen ? 48 : 56) : (isSmallScreen ? 70 : 84);
+  const cardPadding = isSmallScreen ? 20 : 28;
 
   return (
-    <View className="flex-1 bg-[#081220]">
-      <StatusBar barStyle="light-content" />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#020617" />
+      
+      {/* Premium Dark Gradient */}
       <LinearGradient
-        colors={[Colors.navyDark, '#0D1B2E', '#142845']}
-        className="absolute inset-0"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        colors={['#020617', '#0F172A', '#1E293B']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
       />
 
-      {particles.map((p) => (
-        <FloatingParticle key={p.id} delay={p.delay} size={p.size} startX={p.startX} startY={p.startY} />
-      ))}
-
       <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-        keyboardVerticalOffset={Platform.OS === 'android' ? 20 : 0}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            paddingHorizontal: 32,
-            paddingTop: insets.top + (Platform.OS === 'web' ? 40 : 20),
-            paddingBottom: insets.bottom + 40,
-            maxWidth: 460,
-            alignSelf: 'center',
-            width: '100%',
-          }}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + (isSmallScreen ? 12 : 24),
+              paddingBottom: insets.bottom + (isSmallScreen ? 16 : 32),
+            }
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="justify-center py-10" style={{ minHeight: '100%' }}>
-            <Animated.View
-              className={keyboardVisible ? "items-center mb-4" : "items-center mb-10"}
-              style={{ opacity: logoOpacity, transform: [{ scale: logoScale }] }}
-            >
-              <View className={keyboardVisible ? "items-center justify-center mb-4" : "items-center justify-center mb-6"}>
+          <Animated.View
+            style={[
+              styles.mainWrapper,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+            ]}
+          >
+            {/* App Logo & Branding */}
+            <View style={[styles.brandingContainer, keyboardVisible && styles.brandingContainerCompact]}>
+              <View style={styles.logoWrapper}>
                 <Animated.View
-                  className="absolute w-28 h-28 rounded-full border border-primary/20 bg-primary/5 shadow-2xl shadow-primary/30"
-                  style={{ transform: [{ scale: keyboardVisible ? 0.6 : glowPulse }] }}
+                  style={[
+                    styles.logoGlow,
+                    { transform: [{ scale: keyboardVisible ? 0.7 : glowPulse }] }
+                  ]}
                 />
                 <Image
                   source={appLogo}
-                  style={{ width: keyboardVisible ? 55 : 85, height: keyboardVisible ? 55 : 85 }}
+                  style={{ width: logoSize, height: logoSize }}
                   resizeMode="contain"
                 />
               </View>
-              <View className="items-center">
-                <Text className="text-3xl font-inter-bold text-surface tracking-[6px] uppercase text-center">{getAppName().replace(' Driver', '')}</Text>
-                {getAppName().includes('Driver') && (
-                  <Text className="text-3xl font-inter-bold text-surface tracking-[8px] uppercase text-center mt-1">DRIVER</Text>
-                )}
-              </View>
-              <View className="flex-row items-center mt-4">
-                <View className="h-[1px] w-8 bg-white/20 mr-3" />
-                <Text className="text-[10px] font-inter-bold text-white/40 uppercase tracking-[3px]">{getAppSubtitle()}</Text>
-                <View className="h-[1px] w-8 bg-white/20 ml-3" />
-              </View>
-            </Animated.View>
 
-            <Animated.View
-              className="bg-white/5 rounded-[32px] p-8 border border-white/10 shadow-2xl"
-              style={{
-                opacity: formOpacity,
-                transform: [
-                  { translateY: formSlide },
-                  { scale: logoScale } // Reuse scale animation for a subtle pop on load
-                ]
-              }}
-            >
-              {!otpSent || crossfadeAnim ? (
-                <Animated.View
-                  style={{ opacity: phoneOpacity, transform: [{ translateX: phoneTranslateX }] }}
-                  pointerEvents={otpSent ? 'none' : 'auto'}
-                >
-                  <Text className="text-[10px] font-inter-bold text-white/30 mb-5 uppercase tracking-[2.5px]">Enter Mobile Number</Text>
-                  <View className="flex-row items-center mb-8 h-14">
-                    <View className="w-16 h-full rounded-2xl bg-white/5 items-center justify-center border border-white/10 mr-4">
-                      <Text className="text-lg font-inter-bold text-surface">+91</Text>
+              {!keyboardVisible && (
+                <View style={styles.titleWrapper}>
+                  <Text style={styles.appNameText}>
+                    {getAppName().replace(' Driver', '')}
+                  </Text>
+                  {getAppName().includes('Driver') && (
+                    <Text style={styles.driverTagText}>DRIVER PARTNER</Text>
+                  )}
+                  <Text style={styles.subtitleText}>{getAppSubtitle()}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Glassmorphic Form Card */}
+            <View style={[styles.formCard, { padding: cardPadding }]}>
+              {!otpSent ? (
+                // ─── PHONE NUMBER FORM ───
+                <View>
+                  <Text style={styles.cardHeaderTitle}>Enter Mobile Number</Text>
+                  <Text style={styles.cardHeaderSub}>We will send a 4-digit verification code</Text>
+
+                  <View style={styles.phoneInputRow}>
+                    <View style={styles.countryCodeBadge}>
+                      <Text style={styles.countryCodeText}>+91</Text>
                     </View>
                     <TextInput
-                      className="flex-1 h-full rounded-2xl bg-white/5 px-5 text-xl font-inter-bold text-surface border border-white/10"
-                      placeholder="Mobile Number"
-                      placeholderTextColor="rgba(255,255,255,0.15)"
+                      style={styles.phoneTextInput}
+                      placeholder="10-digit mobile number"
+                      placeholderTextColor="rgba(255,255,255,0.3)"
                       keyboardType="phone-pad"
                       maxLength={10}
                       value={phone}
                       onChangeText={setPhone}
-                      style={Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}}
+                      autoFocus={false}
                     />
                   </View>
+
                   <TouchableOpacity
-                    className="h-16 rounded-[20px] overflow-hidden shadow-2xl shadow-primary/40"
+                    style={styles.primaryBtn}
                     onPress={handleSendOtp}
                     disabled={loading}
                     activeOpacity={0.85}
                   >
                     <LinearGradient
-                      colors={['#000000', '#1A1A1A']}
-                      className="flex-1 items-center justify-center flex-row"
+                      colors={['#1E293B', '#0F172A']}
+                      style={styles.gradientBtnContent}
                       start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                     >
                       {loading ? (
-                        <ActivityIndicator color={Colors.surface} />
+                        <ActivityIndicator color="#FFFFFF" />
                       ) : (
                         <>
-                          <Text className="text-base font-inter-bold text-surface mr-3">Secure Login</Text>
-                          <Ionicons name="shield-checkmark" size={18} color={Colors.surface} />
+                          <Text style={styles.primaryBtnText}>Get Verification Code</Text>
+                          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
                         </>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
-                </Animated.View>
-              ) : null}
-
-              {otpSent ? (
-                <Animated.View
-                  className="absolute inset-x-7 top-7"
-                  style={{ opacity: otpOpacity, transform: [{ translateX: otpTranslateX }] }}
-                >
-                  <View className="flex-row items-center justify-between mb-5">
-                    <TouchableOpacity onPress={backToPhone} className="w-9 h-9 rounded-xl bg-white/5 items-center justify-center border border-white/10">
-                      <Ionicons name="chevron-back" size={18} color={Colors.surface} />
+                </View>
+              ) : (
+                // ─── OTP VERIFICATION FORM ───
+                <View>
+                  <View style={styles.otpHeaderRow}>
+                    <TouchableOpacity onPress={backToPhone} style={styles.backIconBtn}>
+                      <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
-                    <Text className="text-base font-inter-bold text-surface">Security Code</Text>
-                    <View className="w-9" />
+                    <Text style={styles.cardHeaderTitle}>Verify OTP</Text>
+                    <View style={{ width: 36 }} />
                   </View>
 
-                  <Text className="text-[13px] font-inter text-white/40 text-center mb-6 leading-5">Verification code sent to{'\n'}
-                    <Text className="text-primary-light font-inter-bold">+91 {phone}</Text>
-                  </Text>
-
-
+                  <View style={styles.sentToRow}>
+                    <Text style={styles.sentToText}>
+                      Code sent to <Text style={styles.phoneHighlight}>+91 {phone}</Text>
+                    </Text>
+                    <TouchableOpacity onPress={backToPhone} style={styles.editPhoneBtn}>
+                      <Ionicons name="pencil" size={12} color="#38BDF8" />
+                      <Text style={styles.editPhoneText}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
 
                   <TextInput
-                    className="h-16 rounded-2xl bg-white/5 px-4 text-3xl font-inter-bold text-surface border border-white/10 mb-8 text-center tracking-[12px]"
-                    placeholder="0000"
-                    placeholderTextColor="rgba(255,255,255,0.1)"
+                    style={styles.otpTextInput}
+                    placeholder="• • • •"
+                    placeholderTextColor="rgba(255,255,255,0.2)"
                     keyboardType="number-pad"
                     maxLength={4}
                     value={otp}
                     onChangeText={setOtp}
                     autoFocus
-                    style={Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}}
                   />
 
                   <TouchableOpacity
-                    className="h-16 rounded-[20px] overflow-hidden shadow-2xl shadow-primary/30"
+                    style={styles.primaryBtn}
                     onPress={handleVerifyOtp}
                     disabled={loading}
                     activeOpacity={0.85}
                   >
                     <LinearGradient
-                      colors={['#000000', '#1A1A1A']}
-                      className="flex-1 items-center justify-center"
+                      colors={['#16A34A', '#15803D']}
+                      style={styles.gradientBtnContent}
                       start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                     >
                       {loading ? (
-                        <ActivityIndicator color={Colors.surface} />
+                        <ActivityIndicator color="#FFFFFF" />
                       ) : (
-                        <Text className="text-base font-inter-bold text-surface">Verify Identity</Text>
+                        <>
+                          <Text style={styles.primaryBtnText}>Verify & Login</Text>
+                          <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                        </>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
 
-                  <View className="mt-8 items-center">
+                  <View style={styles.resendContainer}>
                     {resendTimer > 0 ? (
-                      <Text className="text-[11px] font-inter-medium text-white/30 uppercase tracking-[1px]">
-                        Resend code in <Text className="text-primary-light font-inter-bold">{resendTimer}s</Text>
+                      <Text style={styles.resendTimerText}>
+                        Resend code in <Text style={{ color: '#38BDF8', fontWeight: '800' }}>{resendTimer}s</Text>
                       </Text>
                     ) : (
                       <TouchableOpacity onPress={handleSendOtp} disabled={loading}>
-                        <Text className="text-[11px] font-inter-bold text-primary-light uppercase tracking-[2px] py-2">
-                          Resend Verification Code
-                        </Text>
+                        <Text style={styles.resendBtnText}>Resend Verification Code</Text>
                       </TouchableOpacity>
                     )}
                   </View>
-                </Animated.View>
-              ) : null}
-            </Animated.View>
-          </View>
+                </View>
+              )}
+            </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#020617',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#020617',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    maxWidth: 440,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  mainWrapper: {
+    width: '100%',
+  },
+  // Branding
+  brandingContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  brandingContainerCompact: {
+    marginBottom: 12,
+  },
+  logoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  logoGlow: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+  },
+  titleWrapper: {
+    alignItems: 'center',
+  },
+  appNameText: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  driverTagText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#38BDF8',
+    letterSpacing: 5,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  subtitleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 2,
+    marginTop: 6,
+    textTransform: 'uppercase',
+  },
+  // Card
+  formCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  cardHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  cardHeaderSub: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.4)',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  // Inputs
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 56,
+    marginBottom: 20,
+    gap: 10,
+  },
+  countryCodeBadge: {
+    height: 56,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  flagEmoji: {
+    fontSize: 16,
+  },
+  countryCodeText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  phoneTextInput: {
+    flex: 1,
+    height: 56,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 16,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  otpHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  backIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sentToRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  sentToText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+  },
+  phoneHighlight: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  editPhoneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    borderRadius: 6,
+  },
+  editPhoneText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#38BDF8',
+  },
+  otpTextInput: {
+    height: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: 14,
+    marginBottom: 20,
+  },
+  // Buttons
+  primaryBtn: {
+    height: 56,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  gradientBtnContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  resendContainer: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  resendTimerText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '600',
+  },
+  resendBtnText: {
+    fontSize: 12,
+    color: '#38BDF8',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+});

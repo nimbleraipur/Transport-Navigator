@@ -294,7 +294,7 @@ export default function RegisterScreen() {
           </Text>
           <Text className="text-sm font-inter-medium text-white/50 text-center mb-8 leading-6">
             Sorry! We are currently not available in your area.{'\n'}
-            Stay tuned — we are expanding soon! 🚀
+            Stay tuned — we are expanding soon!
           </Text>
 
           <View className="bg-white/8 rounded-2xl p-5 w-full border border-white/10 mb-8">

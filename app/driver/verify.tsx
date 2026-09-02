@@ -9,6 +9,7 @@ import {
     Alert,
     ActivityIndicator,
     StyleSheet,
+    Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,39 +21,45 @@ import { getApiUrl } from '@/lib/query-client';
 import Colors from '@/constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type DocType = 'aadharPhoto' | 'rcPhoto' | 'licensePhoto' | 'profileSelfie' | 'vehiclePhoto' | 'selfieWithVehicle';
+type DocType = 'licensePhoto' | 'rcPhoto' | 'vehiclePhoto' | 'profileSelfie' | 'qrPhoto';
 
-interface DocItemProps {
+interface DocCardProps {
     label: string;
+    subLabel?: string;
     type: DocType;
     image: string | null;
     onPick: (type: DocType) => void;
     icon: string;
+    aspectRatio?: number;
 }
 
-function DocItem({ label, type, image, onPick, icon }: DocItemProps) {
+function DocCard({ label, subLabel, type, image, onPick, icon, aspectRatio = 16 / 9 }: DocCardProps) {
     return (
-        <View style={styles.docItemContainer}>
-            <Text style={styles.docItemLabel}>{label}</Text>
+        <View style={styles.docCardContainer}>
+            <View style={styles.docLabelRow}>
+                <Text style={styles.docCardLabel}>{label}</Text>
+                {subLabel && <Text style={styles.docCardSubLabel}>{subLabel}</Text>}
+            </View>
             <TouchableOpacity
                 onPress={() => onPick(type)}
-                activeOpacity={0.7}
-                style={styles.docItemBox}
+                activeOpacity={0.8}
+                style={[styles.docCardBox, { aspectRatio }]}
             >
                 {image ? (
                     <>
                         <Image source={{ uri: image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                        <View style={styles.docItemEditOverlay}>
-                            <Ionicons name="camera" size={16} color={Colors.primary} />
+                        <View style={styles.docCardEditOverlay}>
+                            <Ionicons name="camera" size={16} color="#000000" />
+                            <Text style={styles.docCardEditText}>Change Photo</Text>
                         </View>
                     </>
                 ) : (
-                    <View style={styles.docItemEmpty}>
-                        <View style={styles.docItemIconBg}>
-                            <MaterialCommunityIcons name={icon as any} size={24} color={Colors.primary} />
+                    <View style={styles.docCardEmpty}>
+                        <View style={styles.docCardIconBg}>
+                            <MaterialCommunityIcons name={icon as any} size={28} color="#000000" />
                         </View>
-                        <Text style={styles.docItemUploadText}>Upload Photo</Text>
-                        <Text style={styles.docItemSubText}>Tap to capture or select</Text>
+                        <Text style={styles.docCardUploadText}>Tap to Capture / Upload</Text>
+                        <Text style={styles.docCardSubText}>Take a clear, readable photo</Text>
                     </View>
                 )}
             </TouchableOpacity>
@@ -64,50 +71,32 @@ export default function DriverVerifyScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { user, token, refreshUser, logout } = useAuth();
+    const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
     const [currentStep, setCurrentStep] = useState(1);
-    const [aadharNumber, setAadharNumber] = useState('');
-    const [rcNumber, setRcNumber] = useState('');
-    const [licenseNumber, setLicenseNumber] = useState('');
     const [name, setName] = useState(user?.name || '');
-    const [docs, setDocs] = useState<Record<DocType, string | null>>({
-        aadharPhoto: null,
-        rcPhoto: null,
-        licensePhoto: null,
-        profileSelfie: null,
-        vehiclePhoto: null,
-        selfieWithVehicle: null,
-    });
-
-    // Optional Bank Details
-    const [accountHolderName, setAccountHolderName] = useState('');
-    const [accountNumber, setAccountNumber] = useState('');
-    const [ifscCode, setIfscCode] = useState('');
     const [upiId, setUpiId] = useState('');
+    const [docs, setDocs] = useState<Record<DocType, string | null>>({
+        profileSelfie: null,
+        licensePhoto: null,
+        rcPhoto: null,
+        vehiclePhoto: null,
+        qrPhoto: null,
+    });
 
     const [loading, setLoading] = useState(false);
 
-    // Load draft on mount
+    // Load saved draft on mount
     useEffect(() => {
         const loadDraft = async () => {
             try {
-                const stored = await AsyncStorage.getItem('driver_verify_draft');
+                const stored = await AsyncStorage.getItem('driver_verify_draft_v2');
                 if (stored) {
                     const draft = JSON.parse(stored);
                     if (draft.name) setName(draft.name);
-                    if (draft.aadharNumber) setAadharNumber(draft.aadharNumber);
-                    if (draft.rcNumber) setRcNumber(draft.rcNumber);
-                    if (draft.licenseNumber) setLicenseNumber(draft.licenseNumber);
-                    if (draft.accountHolderName) setAccountHolderName(draft.accountHolderName);
-                    if (draft.accountNumber) setAccountNumber(draft.accountNumber);
-                    if (draft.ifscCode) setIfscCode(draft.ifscCode);
                     if (draft.upiId) setUpiId(draft.upiId);
-                    if (draft.docs) {
-                        setDocs(prev => ({ ...prev, ...draft.docs }));
-                    }
-                    if (draft.currentStep) {
-                        setCurrentStep(draft.currentStep);
-                    }
+                    if (draft.docs) setDocs(prev => ({ ...prev, ...draft.docs }));
+                    if (draft.currentStep) setCurrentStep(draft.currentStep);
                 }
             } catch (e) {
                 console.error('Error loading verification draft:', e);
@@ -121,17 +110,11 @@ export default function DriverVerifyScreen() {
         try {
             const newDraft = {
                 name: updates.hasOwnProperty('name') ? updates.name : name,
-                aadharNumber: updates.hasOwnProperty('aadharNumber') ? updates.aadharNumber : aadharNumber,
-                rcNumber: updates.hasOwnProperty('rcNumber') ? updates.rcNumber : rcNumber,
-                licenseNumber: updates.hasOwnProperty('licenseNumber') ? updates.licenseNumber : licenseNumber,
-                accountHolderName: updates.hasOwnProperty('accountHolderName') ? updates.accountHolderName : accountHolderName,
-                accountNumber: updates.hasOwnProperty('accountNumber') ? updates.accountNumber : accountNumber,
-                ifscCode: updates.hasOwnProperty('ifscCode') ? updates.ifscCode : ifscCode,
                 upiId: updates.hasOwnProperty('upiId') ? updates.upiId : upiId,
                 docs: updates.hasOwnProperty('docs') ? updates.docs : docs,
                 currentStep: updates.hasOwnProperty('currentStep') ? updates.currentStep : currentStep,
             };
-            await AsyncStorage.setItem('driver_verify_draft', JSON.stringify(newDraft));
+            await AsyncStorage.setItem('driver_verify_draft_v2', JSON.stringify(newDraft));
         } catch (e) {
             console.error('Error saving verification draft:', e);
         }
@@ -140,18 +123,11 @@ export default function DriverVerifyScreen() {
     const isStepValid = (step: number) => {
         switch (step) {
             case 1:
-                return name.trim().length >= 3 && !!docs.profileSelfie;
+                return name.trim().length >= 2 && !!docs.profileSelfie;
             case 2:
-                return aadharNumber.trim().length === 12 && !!docs.aadharPhoto;
+                return !!docs.licensePhoto && !!docs.rcPhoto && !!docs.vehiclePhoto;
             case 3:
-                if (licenseNumber.trim().length > 0) {
-                    return !!docs.licensePhoto;
-                }
-                return true;
-            case 4:
-                return rcNumber.trim().length >= 5 && !!docs.rcPhoto && !!docs.vehiclePhoto && !!docs.selfieWithVehicle;
-            case 5:
-                return true;
+                return true; // Payout optional / flexible
             default:
                 return false;
         }
@@ -160,15 +136,15 @@ export default function DriverVerifyScreen() {
     const pickImage = async (type: DocType) => {
         Alert.alert(
             'Upload Photo',
-            'Choose a source',
+            'Select source for document photo',
             [
                 {
-                    text: 'Camera',
+                    text: 'Take Photo',
                     onPress: async () => {
                         try {
                             const { status } = await ImagePicker.requestCameraPermissionsAsync();
                             if (status !== 'granted') {
-                                Alert.alert('Permission Required', 'Camera access is needed to capture documents. Please allow camera access in your device settings.', [{ text: 'OK' }]);
+                                Alert.alert('Permission Required', 'Camera permission is required to capture document photos.');
                                 return;
                             }
                             const result = await ImagePicker.launchCameraAsync({
@@ -182,18 +158,17 @@ export default function DriverVerifyScreen() {
                                 saveDraft({ docs: newDocs });
                             }
                         } catch (e) {
-                            console.error('Error launching camera:', e);
-                            Alert.alert('Error', 'Failed to launch camera.');
+                            Alert.alert('Error', 'Failed to launch camera');
                         }
                     },
                 },
                 {
-                    text: 'Gallery',
+                    text: 'Choose from Gallery',
                     onPress: async () => {
                         try {
                             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                             if (status !== 'granted') {
-                                Alert.alert('Permission Required', 'Photo library access is needed to upload documents. Please allow photo access in your device settings.', [{ text: 'OK' }]);
+                                Alert.alert('Permission Required', 'Photo library permission is required to select photos.');
                                 return;
                             }
                             const result = await ImagePicker.launchImageLibraryAsync({
@@ -207,8 +182,7 @@ export default function DriverVerifyScreen() {
                                 saveDraft({ docs: newDocs });
                             }
                         } catch (e) {
-                            console.error('Error launching image library:', e);
-                            Alert.alert('Error', 'Failed to open photo library.');
+                            Alert.alert('Error', 'Failed to open photo gallery');
                         }
                     },
                 },
@@ -218,41 +192,23 @@ export default function DriverVerifyScreen() {
     };
 
     const handleSubmit = async () => {
-        if (!name || name.length < 3) {
-            return Alert.alert('Invalid Data', 'Please enter your full name (min 3 chars).');
+        if (!name || name.trim().length < 2) {
+            return Alert.alert('Missing Name', 'Please enter your full name.');
         }
-        if (!aadharNumber || aadharNumber.length < 12) {
-            return Alert.alert('Invalid Data', 'Please enter a valid 12-digit Aadhar number.');
+        if (!docs.profileSelfie) {
+            return Alert.alert('Missing Selfie', 'Please upload your driver selfie photo in Step 1.');
         }
-        if (!rcNumber) {
-            return Alert.alert('Invalid Data', 'Please enter your Vehicle RC number.');
-        }
-        if (licenseNumber.trim().length > 0 && !docs.licensePhoto) {
-            return Alert.alert('Missing Documents', 'Please upload your Driving License photo.');
-        }
-
-        const missingRequired = Object.entries(docs).filter(([key, val]) => {
-            if (key === 'licensePhoto') return false;
-            return !val;
-        });
-
-        if (missingRequired.length > 0) {
-            return Alert.alert('Missing Documents', 'Please upload all required photos.');
+        if (!docs.licensePhoto || !docs.rcPhoto || !docs.vehiclePhoto) {
+            return Alert.alert('Missing Documents', 'Please upload your License, RC, and Vehicle photos in Step 2.');
         }
 
         setLoading(true);
         try {
             const formData = new FormData();
-            formData.append('name', name);
-            formData.append('aadharNumber', aadharNumber);
-            formData.append('rcNumber', rcNumber);
-            formData.append('licenseNumber', licenseNumber || '');
+            formData.append('name', name.trim());
+            if (upiId) formData.append('upiId', upiId.toLowerCase().trim());
 
-            if (accountHolderName) formData.append('accountHolderName', accountHolderName);
-            if (accountNumber) formData.append('accountNumber', accountNumber);
-            if (ifscCode) formData.append('ifscCode', ifscCode.toUpperCase());
-            if (upiId) formData.append('upiId', upiId.toLowerCase());
-
+            // Append photos
             Object.entries(docs).forEach(([key, uri]) => {
                 if (uri) {
                     const filename = uri.split('/').pop() || 'photo.jpg';
@@ -275,49 +231,46 @@ export default function DriverVerifyScreen() {
             const data = await res.json();
             if (res.ok) {
                 await refreshUser();
+                await AsyncStorage.removeItem('driver_verify_draft_v2');
                 router.replace('/driver/pending-approval' as any);
             } else {
-                Alert.alert('Error', data.error || 'Submission failed. Please try again.');
+                Alert.alert('Submission Failed', data.error || 'Please check your details and try again.');
             }
         } catch (e) {
-            console.error('Verification Submit Error:', e);
-            Alert.alert('Error', 'Connection failed. Please try again.');
+            console.error('Verification submit error:', e);
+            Alert.alert('Network Error', 'Connection failed. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     const stepsConfig = [
-        { label: 'Profile', icon: 'account' },
-        { label: 'Aadhar', icon: 'card-account-details' },
-        { label: 'License', icon: 'card-bulleted' },
-        { label: 'Vehicle', icon: 'truck' },
-        { label: 'Payout', icon: 'bank' }
+        { label: 'Profile & Selfie', icon: 'account' },
+        { label: 'Documents', icon: 'file-document' },
+        { label: 'Payout QR', icon: 'qrcode' }
     ];
 
     const stepValid = isStepValid(currentStep);
-    const progressWidth = ((currentStep - 1) / 4) * 100;
+    const progressWidth = ((currentStep - 1) / 2) * 100;
 
     return (
         <View style={styles.container}>
             {/* Header */}
             <LinearGradient
-                colors={['#000000', '#333333']}
-                style={[styles.header, { paddingTop: insets.top + 20 }]}
+                colors={['#0F172A', '#1E293B']}
+                style={[styles.header, { paddingTop: insets.top + 16 }]}
             >
                 <TouchableOpacity onPress={() => logout()} style={styles.logoutBtn}>
-                    <Ionicons name="log-out-outline" size={24} color="#FFF" />
+                    <Ionicons name="log-out-outline" size={22} color="#FFF" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Driver Verification</Text>
-                <Text style={styles.headerSubtitle}>Submit documents to start working</Text>
+                <Text style={styles.headerSubtitle}>Complete 3 quick steps to start earning</Text>
             </LinearGradient>
 
             {/* Stepper */}
             <View style={styles.stepperContainer}>
                 <View style={styles.stepperRow}>
-                    {/* background track */}
                     <View style={styles.stepperTrackBg} />
-                    {/* filled progress */}
                     <View style={[styles.stepperTrackFill, { width: `${progressWidth}%` as any }]} />
 
                     {stepsConfig.map((step, idx) => {
@@ -343,8 +296,8 @@ export default function DriverVerifyScreen() {
                                     ) : (
                                         <MaterialCommunityIcons
                                             name={step.icon as any}
-                                            size={16}
-                                            color={isActive ? Colors.primary : '#9CA3AF'}
+                                            size={18}
+                                            color={isActive ? '#0F172A' : '#9CA3AF'}
                                         />
                                     )}
                                 </TouchableOpacity>
@@ -359,7 +312,7 @@ export default function DriverVerifyScreen() {
 
             <ScrollView
                 style={styles.scroll}
-                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
@@ -367,19 +320,20 @@ export default function DriverVerifyScreen() {
                 {user?.verificationStatus === 'rejected' && currentStep === 1 && (
                     <View style={styles.rejectionBanner}>
                         <View style={styles.rejectionRow}>
-                            <Ionicons name="alert-circle" size={18} color="#EF4444" />
+                            <Ionicons name="alert-circle" size={20} color="#EF4444" />
                             <Text style={styles.rejectionTitle}>Verification Rejected</Text>
                         </View>
                         <Text style={styles.rejectionReason}>
-                            Reason: {user.rejectionReason || 'Documents were invalid or unclear. Please re-submit.'}
+                            {user.rejectionReason || 'Uploaded documents were not clear. Please re-capture and submit.'}
                         </Text>
                     </View>
                 )}
 
-                {/* ─── Step 1: Profile ─── */}
+                {/* ─── Step 1: Profile & Selfie ─── */}
                 {currentStep === 1 && (
-                    <View>
-                        <Text style={styles.sectionTitle}>Driver Profile</Text>
+                    <View className="animate-fade-in">
+                        <Text style={styles.sectionTitle}>1. Profile Details & Selfie</Text>
+                        
                         <View style={styles.inputCard}>
                             <Text style={styles.inputLabel}>Full Name</Text>
                             <TextInput
@@ -390,157 +344,77 @@ export default function DriverVerifyScreen() {
                                 style={styles.textInput}
                             />
                         </View>
-                        <DocItem label="Your Profile Selfie" type="profileSelfie" image={docs.profileSelfie} onPick={pickImage} icon="account-circle-outline" />
+
+                        <DocCard
+                            label="Driver Selfie Photo"
+                            subLabel="Required for verification"
+                            type="profileSelfie"
+                            image={docs.profileSelfie}
+                            onPick={pickImage}
+                            icon="account-box-outline"
+                            aspectRatio={4 / 3}
+                        />
+
                         <View style={styles.infoBox}>
-                            <Text style={styles.infoTitle}>💡 Instructions</Text>
+                            <View style={styles.infoTitleRow}>
+                                <Ionicons name="bulb-outline" size={16} color="#0284C7" />
+                                <Text style={styles.infoTitle}>Selfie Guidelines</Text>
+                            </View>
                             <Text style={styles.infoText}>
-                                Snap a clear selfie with good lighting. Do not wear sunglasses, helmets, or caps. Ensure your face is centered.
+                                • Take a clear selfie in good light.{'\n'}
+                                • Do not wear helmet, cap, or dark sunglasses.{'\n'}
+                                • Ensure your face is centered and fully visible.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* ─── Step 2: Aadhar ─── */}
+                {/* ─── Step 2: Vehicle & License Documents (3 Photos ONLY) ─── */}
                 {currentStep === 2 && (
-                    <View>
-                        <Text style={styles.sectionTitle}>Aadhar Verification</Text>
-                        <View style={styles.inputCard}>
-                            <Text style={styles.inputLabel}>Aadhar Card Number</Text>
-                            <TextInput
-                                value={aadharNumber}
-                                onChangeText={(val) => {
-                                    const digits = val.replace(/\D/g, '').slice(0, 12);
-                                    setAadharNumber(digits);
-                                    saveDraft({ aadharNumber: digits });
-                                }}
-                                placeholder="12-digit Aadhar number"
-                                placeholderTextColor="#9CA3AF"
-                                keyboardType="numeric"
-                                maxLength={12}
-                                style={styles.textInput}
-                            />
-                        </View>
-                        <DocItem label="Aadhar Card Photo" type="aadharPhoto" image={docs.aadharPhoto} onPick={pickImage} icon="card-account-details-outline" />
-                        <View style={styles.infoBox}>
-                            <Text style={styles.infoTitle}>💡 Instructions</Text>
-                            <Text style={styles.infoText}>
-                                Place your Aadhar card on a flat surface under good lighting and snap a clear photo of the front side. Ensure the 12-digit number is readable.
-                            </Text>
-                        </View>
+                    <View className="animate-fade-in">
+                        <Text style={styles.sectionTitle}>2. Upload Document Photos</Text>
+
+                        <DocCard
+                            label="1. Driving License Photo"
+                            subLabel="Clear front side photo"
+                            type="licensePhoto"
+                            image={docs.licensePhoto}
+                            onPick={pickImage}
+                            icon="card-bulleted-outline"
+                        />
+
+                        <DocCard
+                            label="2. Vehicle RC Photo"
+                            subLabel="Registration Certificate photo"
+                            type="rcPhoto"
+                            image={docs.rcPhoto}
+                            onPick={pickImage}
+                            icon="file-document-outline"
+                        />
+
+                        <DocCard
+                            label="3. Vehicle Photo"
+                            subLabel="Full front/side view showing number plate"
+                            type="vehiclePhoto"
+                            image={docs.vehiclePhoto}
+                            onPick={pickImage}
+                            icon="truck-outline"
+                        />
                     </View>
                 )}
 
-                {/* ─── Step 3: Driving License (Optional) ─── */}
+                {/* ─── Step 3: Payout Details (UPI ID & QR Code) ─── */}
                 {currentStep === 3 && (
-                    <View>
+                    <View className="animate-fade-in">
                         <View style={styles.sectionTitleRow}>
-                            <Text style={styles.sectionTitle}>Driving License</Text>
+                            <Text style={styles.sectionTitle}>3. Payout & Earnings Details</Text>
                             <View style={styles.optionalBadge}>
-                                <Text style={styles.optionalBadgeText}>Optional</Text>
+                                <Text style={styles.optionalBadgeText}>Direct Payout</Text>
                             </View>
                         </View>
-                        <View style={styles.inputCard}>
-                            <Text style={styles.inputLabel}>Driving License Number</Text>
-                            <TextInput
-                                value={licenseNumber}
-                                onChangeText={(val) => {
-                                    const upper = val.toUpperCase();
-                                    setLicenseNumber(upper);
-                                    saveDraft({ licenseNumber: upper });
-                                }}
-                                placeholder="Enter License Number"
-                                placeholderTextColor="#9CA3AF"
-                                autoCapitalize="characters"
-                                style={styles.textInput}
-                            />
-                        </View>
-                        <DocItem label="Driver License Photo" type="licensePhoto" image={docs.licensePhoto} onPick={pickImage} icon="card-bulleted-outline" />
-                        <View style={styles.infoBox}>
-                            <Text style={styles.infoTitle}>💡 Instructions</Text>
-                            <Text style={styles.infoText}>
-                                If you have a driving license, please enter the license number and upload a photo of the card. You can skip this step if not applicable.
-                            </Text>
-                        </View>
-                    </View>
-                )}
 
-                {/* ─── Step 4: Vehicle & RC ─── */}
-                {currentStep === 4 && (
-                    <View>
-                        <Text style={styles.sectionTitle}>Vehicle & RC Details</Text>
                         <View style={styles.inputCard}>
-                            <Text style={styles.inputLabel}>Vehicle RC Number</Text>
-                            <TextInput
-                                value={rcNumber}
-                                onChangeText={(val) => {
-                                    const upper = val.toUpperCase();
-                                    setRcNumber(upper);
-                                    saveDraft({ rcNumber: upper });
-                                }}
-                                placeholder="Enter RC Number"
-                                placeholderTextColor="#9CA3AF"
-                                autoCapitalize="characters"
-                                style={styles.textInput}
-                            />
-                        </View>
-                        <DocItem label="Vehicle Registration (RC) Photo" type="rcPhoto" image={docs.rcPhoto} onPick={pickImage} icon="file-document-outline" />
-                        <DocItem label="Photo of your Vehicle" type="vehiclePhoto" image={docs.vehiclePhoto} onPick={pickImage} icon="truck-outline" />
-                        <DocItem label="Selfie with your Vehicle" type="selfieWithVehicle" image={docs.selfieWithVehicle} onPick={pickImage} icon="account-group-outline" />
-                        <View style={styles.infoBox}>
-                            <Text style={styles.infoTitle}>💡 Instructions</Text>
-                            <Text style={styles.infoText}>
-                                Make sure your RC number matches the physical card. The vehicle photo should clearly show the license plate.
-                            </Text>
-                        </View>
-                    </View>
-                )}
-
-                {/* ─── Step 5: Payout (Optional) ─── */}
-                {currentStep === 5 && (
-                    <View>
-                        <View style={styles.sectionTitleRow}>
-                            <Text style={styles.sectionTitle}>Payout Credentials</Text>
-                            <View style={styles.optionalBadge}>
-                                <Text style={styles.optionalBadgeText}>Optional</Text>
-                            </View>
-                        </View>
-                        <View style={styles.inputCard}>
-                            <Text style={styles.inputLabel}>Account Holder Name</Text>
-                            <TextInput
-                                value={accountHolderName}
-                                onChangeText={(val) => { setAccountHolderName(val); saveDraft({ accountHolderName: val }); }}
-                                placeholder="Name as per bank record"
-                                placeholderTextColor="#9CA3AF"
-                                style={[styles.textInput, { marginBottom: 16 }]}
-                            />
-                            <Text style={styles.inputLabel}>Account Number</Text>
-                            <TextInput
-                                value={accountNumber}
-                                onChangeText={(val) => {
-                                    const digits = val.replace(/\D/g, '');
-                                    setAccountNumber(digits);
-                                    saveDraft({ accountNumber: digits });
-                                }}
-                                placeholder="Bank account number"
-                                placeholderTextColor="#9CA3AF"
-                                keyboardType="numeric"
-                                style={[styles.textInput, { marginBottom: 16 }]}
-                            />
-                            <Text style={styles.inputLabel}>IFSC Code</Text>
-                            <TextInput
-                                value={ifscCode}
-                                onChangeText={(val) => {
-                                    const upper = val.toUpperCase().slice(0, 11);
-                                    setIfscCode(upper);
-                                    saveDraft({ ifscCode: upper });
-                                }}
-                                placeholder="Ex. SBIN000123"
-                                placeholderTextColor="#9CA3AF"
-                                autoCapitalize="characters"
-                                maxLength={11}
-                                style={[styles.textInput, { marginBottom: 16 }]}
-                            />
-                            <Text style={styles.inputLabel}>UPI Alias (VPA)</Text>
+                            <Text style={styles.inputLabel}>UPI ID (VPA)</Text>
                             <TextInput
                                 value={upiId}
                                 onChangeText={(val) => {
@@ -548,18 +422,22 @@ export default function DriverVerifyScreen() {
                                     setUpiId(lower);
                                     saveDraft({ upiId: lower });
                                 }}
-                                placeholder="name@upi"
+                                placeholder="Example: 9876543210@paytm or name@upi"
                                 placeholderTextColor="#9CA3AF"
                                 autoCapitalize="none"
                                 style={styles.textInput}
                             />
                         </View>
-                        <View style={styles.infoBox}>
-                            <Text style={styles.infoTitle}>💡 Instructions</Text>
-                            <Text style={styles.infoText}>
-                                Add your bank or UPI details to withdraw earnings directly. You can skip this step and add it later in settings.
-                            </Text>
-                        </View>
+
+                        <DocCard
+                            label="Payment QR Code Photo"
+                            subLabel="Upload PhonePe / GPay / PayTM QR Image"
+                            type="qrPhoto"
+                            image={docs.qrPhoto}
+                            onPick={pickImage}
+                            icon="qrcode-scan"
+                            aspectRatio={4 / 3}
+                        />
                     </View>
                 )}
 
@@ -579,7 +457,7 @@ export default function DriverVerifyScreen() {
                         </TouchableOpacity>
                     )}
 
-                    {currentStep < 5 ? (
+                    {currentStep < 3 ? (
                         <TouchableOpacity
                             onPress={() => {
                                 const next = currentStep + 1;
@@ -590,7 +468,7 @@ export default function DriverVerifyScreen() {
                             style={[styles.continueBtn, !stepValid && styles.continueBtnDisabled]}
                         >
                             <Text style={[styles.continueBtnText, !stepValid && styles.continueBtnTextDisabled]}>
-                                {currentStep === 3 && licenseNumber.trim().length === 0 ? 'Skip / Continue' : 'Continue'}
+                                Continue
                             </Text>
                             <Ionicons
                                 name="chevron-forward"
@@ -601,10 +479,7 @@ export default function DriverVerifyScreen() {
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity
-                            onPress={async () => {
-                                await handleSubmit();
-                                try { await AsyncStorage.removeItem('driver_verify_draft'); } catch (e) { console.error(e); }
-                            }}
+                            onPress={handleSubmit}
                             disabled={loading}
                             style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
                         >
@@ -612,7 +487,7 @@ export default function DriverVerifyScreen() {
                                 <ActivityIndicator color="#FFF" />
                             ) : (
                                 <Text style={styles.submitBtnText}>
-                                    {!accountHolderName && !accountNumber && !upiId ? 'Skip & Submit' : 'Submit Verification'}
+                                    Complete Verification
                                 </Text>
                             )}
                         </TouchableOpacity>
@@ -624,64 +499,68 @@ export default function DriverVerifyScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FFFFFF' },
+    container: { flex: 1, backgroundColor: '#F8FAFC' },
     // Header
-    header: { paddingBottom: 25, paddingHorizontal: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
-    logoutBtn: { position: 'absolute', top: 52, right: 24, zIndex: 10, padding: 8 },
-    headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFF' },
-    headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4 },
+    header: { paddingBottom: 20, paddingHorizontal: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+    logoutBtn: { position: 'absolute', top: 48, right: 20, zIndex: 10, padding: 8 },
+    headerTitle: { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
+    headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
     // Stepper
-    stepperContainer: { paddingHorizontal: 24, paddingVertical: 16, backgroundColor: 'rgba(249,250,251,0.5)', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+    stepperContainer: { paddingHorizontal: 24, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
     stepperRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative' },
-    stepperTrackBg: { position: 'absolute', left: 20, right: 20, top: 20, height: 2, backgroundColor: '#E5E7EB' },
-    stepperTrackFill: { position: 'absolute', left: 20, top: 20, height: 2, backgroundColor: '#000000' },
+    stepperTrackBg: { position: 'absolute', left: 30, right: 30, top: 18, height: 3, backgroundColor: '#E2E8F0' },
+    stepperTrackFill: { position: 'absolute', left: 30, top: 18, height: 3, backgroundColor: '#0F172A' },
     stepItemContainer: { alignItems: 'center', zIndex: 10, flex: 1 },
-    stepCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
-    stepCircleCompleted: { backgroundColor: '#000000', borderColor: '#000000' },
-    stepCircleActive: { backgroundColor: '#FFFFFF', borderColor: '#000000' },
-    stepCircleInactive: { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' },
-    stepLabel: { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginTop: 6 },
-    stepLabelActive: { color: '#000000' },
-    stepLabelInactive: { color: '#9CA3AF' },
+    stepCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
+    stepCircleCompleted: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+    stepCircleActive: { backgroundColor: '#FFFFFF', borderColor: '#0F172A' },
+    stepCircleInactive: { backgroundColor: '#FFFFFF', borderColor: '#CBD5E1' },
+    stepLabel: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 4 },
+    stepLabelActive: { color: '#0F172A' },
+    stepLabelInactive: { color: '#94A3B8' },
     // Scroll
     scroll: { flex: 1 },
-    scrollContent: { paddingTop: 24, paddingHorizontal: 24, maxWidth: 500, alignSelf: 'center', width: '100%' },
+    scrollContent: { paddingTop: 20, paddingHorizontal: 20, maxWidth: 500, alignSelf: 'center', width: '100%' },
     // Section
-    sectionTitle: { fontSize: 12, fontWeight: '700', color: '#000000', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
-    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
-    optionalBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-    optionalBadgeText: { fontSize: 8, fontWeight: '700', color: '#9CA3AF', textTransform: 'uppercase' },
+    sectionTitle: { fontSize: 13, fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 14 },
+    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+    optionalBadge: { backgroundColor: '#E0F2FE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+    optionalBadgeText: { fontSize: 9, fontWeight: '800', color: '#0284C7', textTransform: 'uppercase' },
     // Input Card
-    inputCard: { backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 24 },
-    inputLabel: { fontSize: 11, fontWeight: '700', color: '#000000', textTransform: 'uppercase', marginBottom: 6, marginLeft: 4 },
-    textInput: { backgroundColor: '#FFFFFF', borderRadius: 12, height: 56, paddingHorizontal: 16, fontSize: 14, fontWeight: '700', color: '#000000', borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+    inputCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
+    inputLabel: { fontSize: 11, fontWeight: '800', color: '#334155', textTransform: 'uppercase', marginBottom: 6 },
+    textInput: { backgroundColor: '#F8FAFC', borderRadius: 12, height: 50, paddingHorizontal: 16, fontSize: 14, fontWeight: '700', color: '#0F172A', borderWidth: 1, borderColor: '#CBD5E1' },
     // Info Box
-    infoBox: { backgroundColor: 'rgba(239,246,255,0.5)', borderWidth: 1, borderColor: 'rgba(191,219,254,0.5)', padding: 16, borderRadius: 16, marginBottom: 24 },
-    infoTitle: { fontSize: 10, fontWeight: '700', color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
-    infoText: { fontSize: 11, color: '#1E40AF', lineHeight: 18 },
-    // DocItem
-    docItemContainer: { marginBottom: 24 },
-    docItemLabel: { fontSize: 12, fontWeight: '700', color: '#000000', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 12, marginLeft: 4 },
-    docItemBox: { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-    docItemEditOverlay: { position: 'absolute', top: 12, right: 12, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 999, padding: 8 },
-    docItemEmpty: { alignItems: 'center' },
-    docItemIconBg: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-    docItemUploadText: { fontSize: 12, fontWeight: '700', color: '#000000' },
-    docItemSubText: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },
+    infoBox: { backgroundColor: '#F0F9FF', borderWidth: 1, borderColor: '#BAE6FD', padding: 14, borderRadius: 16, marginBottom: 20 },
+    infoTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    infoTitle: { fontSize: 11, fontWeight: '800', color: '#0369A1', textTransform: 'uppercase' },
+    infoText: { fontSize: 12, color: '#0284C7', lineHeight: 18, fontWeight: '500' },
+    // DocCard
+    docCardContainer: { marginBottom: 18 },
+    docLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+    docCardLabel: { fontSize: 12, fontWeight: '800', color: '#0F172A', textTransform: 'uppercase' },
+    docCardSubLabel: { fontSize: 10, color: '#64748B', fontWeight: '600' },
+    docCardBox: { width: '100%', borderRadius: 16, borderWidth: 2, borderStyle: 'dashed', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+    docCardEditOverlay: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4, elevation: 3 },
+    docCardEditText: { fontSize: 11, fontWeight: '800', color: '#000000' },
+    docCardEmpty: { alignItems: 'center' },
+    docCardIconBg: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    docCardUploadText: { fontSize: 13, fontWeight: '800', color: '#0F172A' },
+    docCardSubText: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
     // Rejection Banner
-    rejectionBanner: { backgroundColor: '#FEF2F2', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', marginBottom: 24 },
-    rejectionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    rejectionTitle: { fontSize: 14, fontWeight: '700', color: '#EF4444', marginLeft: 8 },
-    rejectionReason: { fontSize: 12, color: 'rgba(239,68,68,0.7)', lineHeight: 20 },
+    rejectionBanner: { backgroundColor: '#FEF2F2', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#FECACA', marginBottom: 16 },
+    rejectionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+    rejectionTitle: { fontSize: 14, fontWeight: '800', color: '#DC2626' },
+    rejectionReason: { fontSize: 12, color: '#B91C1C', lineHeight: 18 },
     // Nav Buttons
-    navRow: { flexDirection: 'row', gap: 16, marginTop: 16 },
-    backBtn: { flex: 1, height: 64, borderRadius: 16, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#E5E7EB' },
-    backBtnText: { fontSize: 16, fontWeight: '700', color: '#000000' },
-    continueBtn: { flex: 2, height: 64, borderRadius: 16, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
-    continueBtnDisabled: { backgroundColor: '#E5E7EB' },
-    continueBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-    continueBtnTextDisabled: { color: '#9CA3AF' },
-    submitBtn: { flex: 2, height: 64, borderRadius: 16, backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' },
-    submitBtnDisabled: { backgroundColor: '#9CA3AF' },
-    submitBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+    navRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+    backBtn: { flex: 1, height: 56, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#CBD5E1' },
+    backBtnText: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+    continueBtn: { flex: 2, height: 56, borderRadius: 16, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+    continueBtnDisabled: { backgroundColor: '#CBD5E1' },
+    continueBtnText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
+    continueBtnTextDisabled: { color: '#94A3B8' },
+    submitBtn: { flex: 2, height: 56, borderRadius: 16, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center' },
+    submitBtnDisabled: { backgroundColor: '#94A3B8' },
+    submitBtnText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF' },
 });

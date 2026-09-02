@@ -122,8 +122,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user, token } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
+  // Run on mount AND whenever user/token changes — ensures push token is always registered
   useEffect(() => {
-    registerForPushNotificationsAsync();
+    if (token && user?.id) {
+      registerForPushNotificationsAsync();
+    }
     loadNotifications();
   }, [user?.id, token]);
 
@@ -198,8 +201,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const pushToken = tokenResult.data;
       console.log('[PUSH-TOKEN] Acquired Expo Push Token:', pushToken);
 
-      if (pushToken) {
-        await AsyncStorage.setItem('expo_push_token', pushToken);
+      if (!pushToken) {
+        console.warn('[PUSH-TOKEN] Could not get push token — notifications will not work.');
+        return;
+      }
+
+      // Save locally
+      const cached = await AsyncStorage.getItem('expo_push_token');
+      await AsyncStorage.setItem('expo_push_token', pushToken);
+
+      if (cached === pushToken) {
+        console.log('[PUSH-TOKEN] Token unchanged, skipping backend sync.');
       }
 
       // Register background notification task
@@ -224,21 +236,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Always sync token to backend on every app open
       if (pushToken && token) {
         const baseUrl = getApiUrl();
-        const res = await fetch(new URL('/api/users/profile', baseUrl).toString(), {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ pushToken })
-        });
-        if (res.ok) {
-          console.log('[PUSH-TOKEN] Registered push token on backend successfully');
-        } else {
-          console.error('[PUSH-TOKEN] Failed to register push token on backend:', res.status);
+        try {
+          const res = await fetch(new URL('/api/users/profile', baseUrl).toString(), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ pushToken })
+          });
+          if (res.ok) {
+            console.log('[PUSH-TOKEN] ✅ Push token synced to backend for user:', user?.id);
+          } else {
+            console.error('[PUSH-TOKEN] ❌ Failed to sync push token to backend. Status:', res.status);
+          }
+        } catch (syncErr: any) {
+          console.error('[PUSH-TOKEN] ❌ Network error while syncing push token:', syncErr.message);
         }
+      } else if (!token) {
+        console.warn('[PUSH-TOKEN] No auth token available — cannot sync push token to backend.');
       }
 
       if (Platform.OS === 'android') {

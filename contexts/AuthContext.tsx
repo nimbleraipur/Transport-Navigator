@@ -43,8 +43,8 @@ interface AuthContextValue {
   loading: boolean;
   isAuthenticated: boolean;
   sendOtp: (phone: string) => Promise<{ success: boolean; otp?: string; error?: string }>;
-  verifyOtp: (phone: string, otp: string, role: string) => Promise<{ success: boolean; isNew?: boolean; error?: string }>;
-  register: (data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string; cityCode?: string }) => Promise<{ success: boolean; error?: string }>;
+  verifyOtp: (phone: string, otp: string, role: string, locationCoords?: { lat?: number; lng?: number }) => Promise<{ success: boolean; isNew?: boolean; error?: string }>;
+  register: (data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string; cityCode?: string; city?: string; state?: string; lat?: number; lng?: number }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<UserData>) => void;
   refreshUser: () => Promise<void>;
@@ -139,8 +139,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: result.error };
   }
 
-  async function verifyOtp(phone: string, otp: string, role: string) {
-    const result = await apiCall('/api/auth/verify-otp', { phone, otp, role });
+  async function verifyOtp(phone: string, otp: string, role: string, locationCoords?: { lat?: number; lng?: number }) {
+    const payload: any = { phone, otp, role };
+    if (locationCoords?.lat && locationCoords?.lng) {
+      payload.lat = locationCoords.lat;
+      payload.lng = locationCoords.lng;
+    }
+    const result = await apiCall('/api/auth/verify-otp', payload);
     if (result.success) {
       await AsyncStorage.setItem('auth_token', result.token);
       await AsyncStorage.setItem('auth_user', JSON.stringify(result.user));
@@ -151,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: result.error };
   }
 
-  async function register(data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string; cityCode?: string }) {
+  async function register(data: { phone: string; name: string; role: string; vehicleType?: string; vehicleNumber?: string; licenseNumber?: string; cityCode?: string; city?: string; state?: string; lat?: number; lng?: number }) {
     const result = await apiCall('/api/auth/register', data);
     if (result.success) {
       await AsyncStorage.setItem('auth_token', result.token);

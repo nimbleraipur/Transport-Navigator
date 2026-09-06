@@ -23,6 +23,8 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import Colors from '@/constants/colors';
 import Map, { MapRef } from '@/components/Map';
 
+import { getApiUrl } from '@/lib/query-client';
+
 function PulsingDot() {
   // Removing Animated.View to prevent nativewind unmount crashes during rapid state switches
   return (
@@ -39,7 +41,7 @@ export default function CustomerHomeScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { bookings, fetchBookings, getActiveBooking } = useBookings();
   const { unreadCount } = useNotifications();
   const mapRef = useRef<MapRef>(null);
@@ -57,6 +59,34 @@ export default function CustomerHomeScreen() {
 
   useEffect(() => {
     fetchBookings();
+
+    // Auto-sync customer GPS location with backend to resolve real district/city
+    const syncLocation = async () => {
+      try {
+        const Location = await import('expo-location');
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (loc?.coords && token) {
+            const baseUrl = getApiUrl();
+            await fetch(`${baseUrl}/api/users/me`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                lat: loc.coords.latitude,
+                lng: loc.coords.longitude
+              })
+            });
+          }
+        }
+      } catch (err) {
+        console.log('[CUSTOMER-LOCATION-SYNC] Skipped:', err);
+      }
+    };
+    syncLocation();
 
     Animated.parallel([
       Animated.timing(headerFade, { toValue: 1, duration: 800, useNativeDriver: true }),

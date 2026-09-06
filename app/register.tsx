@@ -108,9 +108,28 @@ export default function RegisterScreen() {
   const formSlide = useRef(new Animated.Value(20)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
 
+  const [userCoords, setUserCoords] = useState<{ lat?: number; lng?: number } | null>(null);
+
   useEffect(() => {
     if (isDriver) {
       checkCityAndFetchVehicles();
+    } else {
+      // For customers, prefetch GPS location in background
+      const prefetchCustomerLocation = async () => {
+        try {
+          const Location = await import('expo-location');
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === 'granted') {
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            if (loc?.coords) {
+              setUserCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+            }
+          }
+        } catch (err) {
+          console.log('[CUSTOMER-REG-LOC] Skipped:', err);
+        }
+      };
+      prefetchCustomerLocation();
     }
   }, [isDriver]);
 
@@ -148,6 +167,7 @@ export default function RegisterScreen() {
       // Step 3: Get current position
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = loc.coords;
+      setUserCoords({ lat: latitude, lng: longitude });
 
       // Step 4: Check if this location is in a service city
       const cityRes = await fetch(`${baseUrl}/api/cities/check?lat=${latitude}&lng=${longitude}`);
@@ -260,15 +280,37 @@ export default function RegisterScreen() {
     if (!name.trim()) { Alert.alert('Missing Name', 'Please enter your full name'); return; }
     if (isDriver && !vehicleNumber.trim()) { Alert.alert('Vehicle Missing', 'Please enter your vehicle number'); return; }
     setLoading(true);
+
+    let finalCoords = userCoords;
+    if (!finalCoords) {
+      try {
+        const Location = await import('expo-location');
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (loc?.coords) {
+            finalCoords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          }
+        }
+      } catch (e) {
+        console.log('[REGISTER-FINAL-LOC] Error:', e);
+      }
+    }
+
     // Derive 2-letter city code from detected city name (e.g. "Bilaspur" → "BL")
     const cityCode = detectedCity
       ? detectedCity.name.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 2)
-      : 'ML'; // ML = MyLoad default for customers or unknown city
+      : 'ML'; // ML = MyLoad default fallback
+
     const result = await register({
       phone: params.phone || '',
       name: name.trim(),
       role: params.role || 'customer',
       cityCode,
+      city: detectedCity?.name,
+      state: detectedCity?.state,
+      lat: finalCoords?.lat,
+      lng: finalCoords?.lng,
       ...(isDriver && { vehicleType, vehicleNumber: vehicleNumber.trim() }),
     });
     setLoading(false);

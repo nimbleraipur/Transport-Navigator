@@ -114,6 +114,27 @@ export default function LoginScreen() {
     }
   }, [authLoading, isAuthenticated, user, appMode, currentPath]);
 
+  const cachedLocationRef = useRef<{ lat?: number; lng?: number } | null>(null);
+
+  useEffect(() => {
+    // Pre-request location permission on app open / login screen launch
+    const prefetchLocation = async () => {
+      try {
+        const Location = await import('expo-location');
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (loc?.coords) {
+            cachedLocationRef.current = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          }
+        }
+      } catch (err) {
+        console.log('[LOGIN-PREFETCH-LOC] Skipped:', err);
+      }
+    };
+    prefetchLocation();
+  }, []);
+
   const handleSendOtp = async () => {
     const clean = phone.replace(/\D/g, '');
     if (clean.length < 10) {
@@ -137,7 +158,22 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const result = await verifyOtp(phone.replace(/\D/g, ''), otp, appMode);
+    let coords = cachedLocationRef.current;
+    if (!coords) {
+      try {
+        const Location = await import('expo-location');
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (loc?.coords) {
+            coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+          }
+        }
+      } catch (e) {
+        console.log('[OTP-VERIFY-LOC] Fallback fetch error:', e);
+      }
+    }
+    const result = await verifyOtp(phone.replace(/\D/g, ''), otp, appMode, coords || undefined);
     setLoading(false);
     if (!result.success) {
       Alert.alert('Verification Error', result.error || 'The OTP code is incorrect.');

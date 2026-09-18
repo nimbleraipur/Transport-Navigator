@@ -467,6 +467,28 @@ export default function DriverDashboardScreen() {
     }
   }, [isFocused]);
 
+  const handleAcceptIncomingRequest = async () => {
+    if (!newRequest) return;
+    try {
+      const bookingId = newRequest.id;
+      const res = await acceptBooking(bookingId);
+      if (res.success) {
+        setNewRequest(null);
+        router.push({ pathname: '/driver/active-booking', params: { id: bookingId } });
+      } else {
+        Alert.alert('Unable to Accept', res.error || 'This booking may have already been taken or cancelled.');
+        setNewRequest(null);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to accept booking');
+      setNewRequest(null);
+    }
+  };
+
+  const handleDeclineIncomingRequest = () => {
+    setNewRequest(null);
+  };
+
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
 
@@ -532,12 +554,30 @@ export default function DriverDashboardScreen() {
 
         // Real-time booking popup and sound listener
         socket.on('booking:new', (data: { booking: any }) => {
-          if (!isFocused || getActiveBooking()) {
-            console.log('[SOCKET] Driver is already in an active ride or dashboard not focused, ignoring new booking request');
+          console.log('[SOCKET] booking:new received on driver dashboard:', data?.booking?.id);
+          if (!data?.booking) return;
+
+          const isBusy = bookings.some(b => ['accepted', 'in_progress'].includes(b.status) && b.driverId === user?.id);
+          if (isBusy) {
+            console.log('[SOCKET] Driver is already in an active ride, ignoring new booking request');
             return;
           }
-          console.log('[SOCKET] New request arrived on dashboard:', data.booking.id);
+
+          console.log('[SOCKET] Showing incoming ride popup for booking:', data.booking.id);
           setNewRequest(data.booking);
+        });
+
+        socket.on('booking:accepted', (data: { booking: any }) => {
+          if (data?.booking?.id) {
+            setNewRequest(prev => (prev?.id === data.booking.id ? null : prev));
+          }
+        });
+
+        socket.on('booking:cancelled', (data: { bookingId?: string; booking?: any }) => {
+          const id = data?.bookingId || data?.booking?.id;
+          if (id) {
+            setNewRequest(prev => (prev?.id === id ? null : prev));
+          }
         });
 
         // Get initial position
@@ -1060,6 +1100,13 @@ export default function DriverDashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Real-time Incoming Ride Request Modal */}
+      <IncomingRequestModal
+        request={newRequest}
+        onAccept={handleAcceptIncomingRequest}
+        onDecline={handleDeclineIncomingRequest}
+      />
     </View>
   );
 }

@@ -74,7 +74,7 @@ interface BookingContextValue {
 const BookingContext = createContext<BookingContextValue | null>(null);
 
 export function BookingProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [bookings, setBookings] = useState<BookingData[]>([]);
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -194,9 +194,12 @@ export function BookingProvider({ children }: { children: ReactNode }) {
 
   const getBookingById = useCallback((id: string) => bookings.find(b => b.id === id), [bookings]);
 
-  const getActiveBooking = useCallback(() =>
-    bookings.find(b => ['pending', 'accepted', 'in_progress'].includes(b.status)),
-    [bookings]);
+  const getActiveBooking = useCallback(() => {
+    if (user?.role === 'driver') {
+      return bookings.find(b => ['accepted', 'in_progress'].includes(b.status) && (b.driverId === user?.id || !b.driverId));
+    }
+    return bookings.find(b => ['pending', 'accepted', 'in_progress'].includes(b.status));
+  }, [bookings, user]);
 
   const checkOperationalAvailability = useCallback(async (lat: number, lng: number) => {
     const data = await apiCall(`/api/cities/check?lat=${lat}&lng=${lng}`);

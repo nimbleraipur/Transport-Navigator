@@ -197,22 +197,36 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
 
       const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId || "b59bcbe1-1876-4a8a-a87e-6684317f62b4";
-      const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
-      const pushToken = tokenResult.data;
-      console.log('[PUSH-TOKEN] Acquired Expo Push Token:', pushToken);
+      let pushToken = '';
+      let expoPushToken = '';
+      let nativeDeviceToken = '';
 
-      if (!pushToken) {
+      try {
+        const tokenResult = await Notifications.getExpoPushTokenAsync({ projectId });
+        expoPushToken = tokenResult?.data || '';
+        console.log('[PUSH-TOKEN] Acquired Expo Push Token:', expoPushToken);
+      } catch (expoErr) {
+        console.warn('[PUSH-TOKEN] ExpoPushToken error:', expoErr);
+      }
+
+      try {
+        const deviceResult = await Notifications.getDevicePushTokenAsync();
+        nativeDeviceToken = typeof deviceResult?.data === 'string' ? deviceResult.data : '';
+        console.log('[PUSH-TOKEN] Acquired Native Device Token (FCM):', nativeDeviceToken);
+      } catch (deviceErr) {
+        console.warn('[PUSH-TOKEN] Native getDevicePushTokenAsync error:', deviceErr);
+      }
+
+      pushToken = nativeDeviceToken || expoPushToken;
+      const combinedTokens = Array.from(new Set([expoPushToken, nativeDeviceToken].filter(Boolean)));
+
+      if (!pushToken && combinedTokens.length === 0) {
         console.warn('[PUSH-TOKEN] Could not get push token — notifications will not work.');
         return;
       }
 
       // Save locally
-      const cached = await AsyncStorage.getItem('expo_push_token');
       await AsyncStorage.setItem('expo_push_token', pushToken);
-
-      if (cached === pushToken) {
-        console.log('[PUSH-TOKEN] Token unchanged, skipping backend sync.');
-      }
 
       // Register background notification task
       if (TaskManager) {
@@ -236,8 +250,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Always sync token to backend on every app open
-      if (pushToken && token) {
+      // Always sync tokens to backend on every app open
+      if (token && combinedTokens.length > 0) {
         const baseUrl = getApiUrl();
         try {
           const res = await fetch(new URL('/api/users/profile', baseUrl).toString(), {
@@ -246,10 +260,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
-            body: JSON.stringify({ pushToken })
+            body: JSON.stringify({
+              pushToken: pushToken || combinedTokens[0],
+              pushTokens: combinedTokens
+            })
           });
           if (res.ok) {
-            console.log('[PUSH-TOKEN] ✅ Push token synced to backend for user:', user?.id);
+            console.log('[PUSH-TOKEN] ✅ Push tokens (FCM & Expo) synced to backend for user:', user?.id);
           } else {
             console.error('[PUSH-TOKEN] ❌ Failed to sync push token to backend. Status:', res.status);
           }

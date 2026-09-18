@@ -474,7 +474,7 @@ export default function DriverDashboardScreen() {
       const res = await acceptBooking(bookingId);
       if (res.success) {
         setNewRequest(null);
-        router.push({ pathname: '/driver/active-booking', params: { id: bookingId } });
+        router.push({ pathname: '/driver/active-booking' as any, params: { id: bookingId } });
       } else {
         Alert.alert('Unable to Accept', res.error || 'This booking may have already been taken or cancelled.');
         setNewRequest(null);
@@ -569,14 +569,14 @@ export default function DriverDashboardScreen() {
 
         socket.on('booking:accepted', (data: { booking: any }) => {
           if (data?.booking?.id) {
-            setNewRequest(prev => (prev?.id === data.booking.id ? null : prev));
+            setNewRequest((prev: any) => (prev?.id === data.booking.id ? null : prev));
           }
         });
 
         socket.on('booking:cancelled', (data: { bookingId?: string; booking?: any }) => {
           const id = data?.bookingId || data?.booking?.id;
           if (id) {
-            setNewRequest(prev => (prev?.id === id ? null : prev));
+            setNewRequest((prev: any) => (prev?.id === id ? null : prev));
           }
         });
 

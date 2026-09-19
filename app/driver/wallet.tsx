@@ -27,7 +27,16 @@ import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import io from 'socket.io-client';
 
-// Safe dynamic loader for react-native-webview (prevents crashes on older binaries without RNCWebViewModule)
+// Safe dynamic loader for Official Native Razorpay SDK (100% In-App Dialog)
+let RazorpayCheckout: any = null;
+try {
+    const rzp = require('react-native-razorpay');
+    RazorpayCheckout = rzp.default || rzp;
+} catch (e) {
+    console.warn('[WALLET-RAZORPAY-SDK] Native Razorpay SDK not linked in current binary:', e);
+}
+
+// Safe dynamic loader for react-native-webview (fallback)
 let WebViewComponent: any = null;
 try {
     const rnw = require('react-native-webview');
@@ -204,18 +213,74 @@ export default function WalletScreen() {
                 throw new Error(orderData.error || 'Failed to initiate payment order');
             }
 
-            const { orderId } = orderData;
-            const url = `${baseUrl}/api/users/wallet/checkout-page?orderId=${orderId}`;
-
+            const { orderId, keyId, userDetails } = orderData;
             setLastProcessedAmount(numAmount);
+            setIsTopUpModalVisible(false);
 
-            if (WebViewComponent) {
+            // 1. Official Native Razorpay SDK Dialog (100% In-App, Uber/Swiggy style)
+            if (RazorpayCheckout && typeof RazorpayCheckout.open === 'function') {
+                const options = {
+                    description: 'Driver Wallet Top-Up',
+                    image: 'https://myloadnimble.in/logo.png',
+                    currency: 'INR',
+                    key: keyId || 'rzp_live_TdUlRiqJ7SQRe8',
+                    amount: String(numAmount * 100),
+                    name: 'My Load 24',
+                    order_id: orderId,
+                    prefill: {
+                        email: userDetails?.email || (user as any)?.email || 'driver@myloadnimble.in',
+                        contact: userDetails?.phone || user?.phone || '',
+                        name: userDetails?.name || user?.name || 'Driver'
+                    },
+                    theme: {
+                        color: '#111827'
+                    }
+                };
+
+                try {
+                    const paymentResponse = await RazorpayCheckout.open(options);
+                    console.log('[RAZORPAY-NATIVE-SUCCESS]', paymentResponse);
+
+                    // Cryptographic HMAC Verification & Immediate Balance Credit on Backend
+                    const verifyRes = await fetch(new URL('/api/users/wallet/verify-razorpay-payment', baseUrl).toString(), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            razorpay_order_id: paymentResponse.razorpay_order_id,
+                            razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                            razorpay_signature: paymentResponse.razorpay_signature
+                        })
+                    });
+
+                    const verifyData = await verifyRes.json();
+                    if (verifyRes.ok && verifyData.success) {
+                        try {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        } catch (_) {}
+                        loadWalletData();
+                        Alert.alert('Payment Successful', `₹${numAmount} has been added to your wallet balance.`);
+                    } else {
+                        Alert.alert('Verification Note', verifyData.error || 'Payment received. Wallet is being updated.');
+                        loadWalletData();
+                    }
+                } catch (sdkErr: any) {
+                    console.log('[RAZORPAY-SDK-CANCEL/ERROR]', sdkErr);
+                    // Code 0 or 2 is user dismissed
+                    if (sdkErr?.code !== 0 && sdkErr?.code !== 2) {
+                        Alert.alert('Payment Notice', sdkErr?.description || 'Payment was not completed.');
+                    }
+                }
+            } else if (WebViewComponent) {
+                // Secondary In-App WebView Modal Fallback
+                const url = `${baseUrl}/api/users/wallet/checkout-page?orderId=${orderId}`;
                 setCheckoutUrl(url);
-                setIsTopUpModalVisible(false);
                 setIsCheckoutModalVisible(true);
             } else {
-                // Fallback for older client builds without native RNCWebViewModule compiled
-                setIsTopUpModalVisible(false);
+                // Older binary fallback
+                const url = `${baseUrl}/api/users/wallet/checkout-page?orderId=${orderId}`;
                 const result = await WebBrowser.openAuthSessionAsync(url, 'myload24driver://wallet-callback');
                 if (result.type === 'success' && result.url.includes('status=success')) {
                     try {

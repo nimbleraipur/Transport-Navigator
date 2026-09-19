@@ -19,13 +19,24 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { WebView } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/query-client';
 import Colors from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import io from 'socket.io-client';
+
+// Safe dynamic loader for react-native-webview (prevents crashes on older binaries without RNCWebViewModule)
+let WebViewComponent: any = null;
+try {
+    const rnw = require('react-native-webview');
+    if (rnw && rnw.WebView) {
+        WebViewComponent = rnw.WebView;
+    }
+} catch (e) {
+    console.warn('[WALLET-WEBVIEW] Native RNCWebViewModule is not compiled into current binary:', e);
+}
 
 export interface WalletTransactionItem {
     _id: string;
@@ -68,7 +79,7 @@ export default function WalletScreen() {
     const [isCheckoutModalVisible, setIsCheckoutModalVisible] = useState(false);
     const [checkoutUrl, setCheckoutUrl] = useState<string>('');
     const [lastProcessedAmount, setLastProcessedAmount] = useState<number>(0);
-    const webViewRef = useRef<WebView>(null);
+    const webViewRef = useRef<any>(null);
 
     const loadWalletData = useCallback(async () => {
         if (!token) return;
@@ -196,12 +207,26 @@ export default function WalletScreen() {
             const { orderId } = orderData;
             const url = `${baseUrl}/api/users/wallet/checkout-page?orderId=${orderId}`;
 
-            console.log(`[WALLET-CHECKOUT] Opening In-App Razorpay Checkout: ${url}`);
-
             setLastProcessedAmount(numAmount);
-            setCheckoutUrl(url);
-            setIsTopUpModalVisible(false);
-            setIsCheckoutModalVisible(true);
+
+            if (WebViewComponent) {
+                setCheckoutUrl(url);
+                setIsTopUpModalVisible(false);
+                setIsCheckoutModalVisible(true);
+            } else {
+                // Fallback for older client builds without native RNCWebViewModule compiled
+                setIsTopUpModalVisible(false);
+                const result = await WebBrowser.openAuthSessionAsync(url, 'myload24driver://wallet-callback');
+                if (result.type === 'success' && result.url.includes('status=success')) {
+                    try {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    } catch (_) {}
+                    loadWalletData();
+                    Alert.alert('Payment Successful', `₹${numAmount} has been credited to your wallet.`);
+                } else {
+                    loadWalletData();
+                }
+            }
         } catch (error: any) {
             console.error('[WALLET-TOPUP-ERROR]', error);
             Alert.alert('Recharge Error', error.message || 'Unable to process payment at this time.');
@@ -729,8 +754,8 @@ export default function WalletScreen() {
                     </View>
 
                     {/* In-App Razorpay Checkout WebView */}
-                    {checkoutUrl ? (
-                        <WebView
+                    {checkoutUrl && WebViewComponent ? (
+                        <WebViewComponent
                             ref={webViewRef}
                             source={{ uri: checkoutUrl }}
                             javaScriptEnabled={true}

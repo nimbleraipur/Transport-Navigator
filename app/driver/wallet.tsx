@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     View, 
     Text, 
@@ -13,12 +13,13 @@ import {
     Alert,
     KeyboardAvoidingView,
     TouchableWithoutFeedback,
-    Keyboard
+    Keyboard,
+    StyleSheet
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
+import { WebView } from 'react-native-webview';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiUrl } from '@/lib/query-client';
@@ -58,10 +59,16 @@ export default function WalletScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [filterType, setFilterType] = useState<'all' | 'credit' | 'debit'>('all');
 
-    // Top-up Modal State
+    // Top-up BottomSheet Modal State
     const [isTopUpModalVisible, setIsTopUpModalVisible] = useState(false);
     const [rechargeAmount, setRechargeAmount] = useState<string>('500');
     const [isProcessingOrder, setIsProcessingOrder] = useState(false);
+
+    // In-App Seamless WebView Checkout Modal State
+    const [isCheckoutModalVisible, setIsCheckoutModalVisible] = useState(false);
+    const [checkoutUrl, setCheckoutUrl] = useState<string>('');
+    const [lastProcessedAmount, setLastProcessedAmount] = useState<number>(0);
+    const webViewRef = useRef<WebView>(null);
 
     const loadWalletData = useCallback(async () => {
         if (!token) return;
@@ -187,43 +194,126 @@ export default function WalletScreen() {
             }
 
             const { orderId } = orderData;
-            const checkoutUrl = `${baseUrl}/api/users/wallet/checkout-page?orderId=${orderId}`;
+            const url = `${baseUrl}/api/users/wallet/checkout-page?orderId=${orderId}`;
 
-            console.log(`[WALLET-CHECKOUT] Opening Razorpay checkout: ${checkoutUrl}`);
+            console.log(`[WALLET-CHECKOUT] Opening In-App Razorpay Checkout: ${url}`);
 
-            // Launch Secure In-App Payment Browser
-            const result = await WebBrowser.openAuthSessionAsync(
-                checkoutUrl,
-                'transportgo://wallet-callback'
-            );
-
-            console.log('[WALLET-CHECKOUT-RESULT]', result);
-
-            // Handle result callback
-            if (result.type === 'success' && result.url) {
-                if (result.url.includes('status=success')) {
-                    try {
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    } catch (_) {}
-                    setIsTopUpModalVisible(false);
-                    Alert.alert(
-                        'Payment Successful',
-                        `₹${numAmount} has been added to your wallet balance.`,
-                        [{ text: 'OK', onPress: () => loadWalletData() }]
-                    );
-                } else if (result.url.includes('status=failed')) {
-                    Alert.alert('Payment Failed', 'Transaction could not be completed. Please try again.');
-                }
-            }
-
-            // Always trigger a refresh after browser session ends to sync latest balance
-            await loadWalletData();
+            setLastProcessedAmount(numAmount);
+            setCheckoutUrl(url);
+            setIsTopUpModalVisible(false);
+            setIsCheckoutModalVisible(true);
         } catch (error: any) {
             console.error('[WALLET-TOPUP-ERROR]', error);
             Alert.alert('Recharge Error', error.message || 'Unable to process payment at this time.');
         } finally {
             setIsProcessingOrder(false);
         }
+    };
+
+    const handleCloseCheckoutModal = () => {
+        setIsCheckoutModalVisible(false);
+        setCheckoutUrl('');
+        loadWalletData();
+    };
+
+    // Handle In-App WebView PostMessage Communication
+    const handleWebViewMessage = (event: any) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+            console.log('[WEBVIEW-PAYMENT-MESSAGE]', data);
+
+            if (data.status === 'success') {
+                try {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (_) {}
+                setIsCheckoutModalVisible(false);
+                setCheckoutUrl('');
+                loadWalletData();
+                Alert.alert(
+                    'Payment Successful',
+                    `₹${lastProcessedAmount || data.amount || rechargeAmount} has been added to your wallet balance.`,
+                    [{ text: 'OK', onPress: () => loadWalletData() }]
+                );
+            } else if (data.status === 'failed') {
+                setIsCheckoutModalVisible(false);
+                setCheckoutUrl('');
+                Alert.alert('Payment Failed', data.error || 'Transaction could not be completed. Please try again.');
+            } else if (data.status === 'cancelled') {
+                setIsCheckoutModalVisible(false);
+                setCheckoutUrl('');
+            }
+        } catch (err) {
+            console.warn('[WEBVIEW-MSG-PARSE-ERROR]', err);
+        }
+    };
+
+    // Handle In-App Deep Link Navigation Redirects
+    const handleNavigationStateChange = (navState: any) => {
+        const url = navState.url || '';
+        console.log('[WEBVIEW-NAV-CHANGE]', url);
+
+        if (url.includes('transportgo://wallet-callback') || url.includes('wallet-callback')) {
+            if (url.includes('status=success')) {
+                try {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (_) {}
+                setIsCheckoutModalVisible(false);
+                setCheckoutUrl('');
+                loadWalletData();
+                Alert.alert(
+                    'Payment Successful',
+                    `₹${lastProcessedAmount || rechargeAmount} has been credited to your wallet balance.`,
+                    [{ text: 'OK', onPress: () => loadWalletData() }]
+                );
+            } else if (url.includes('status=failed')) {
+                setIsCheckoutModalVisible(false);
+                setCheckoutUrl('');
+                Alert.alert('Payment Failed', 'Transaction could not be verified. Please try again.');
+            }
+        }
+    };
+
+    // Intercept UPI deep link schemes (GPay, PhonePe, Paytm, BHIM, Cred, etc.)
+    const handleShouldStartLoadWithRequest = (request: { url: string }) => {
+        const { url } = request;
+        if (!url) return true;
+
+        console.log('[WEBVIEW-REQUEST-URL]', url);
+
+        // Check for Custom Scheme Callbacks
+        if (url.includes('transportgo://wallet-callback') || url.includes('wallet-callback')) {
+            handleNavigationStateChange({ url });
+            return false;
+        }
+
+        // Intercept native UPI applications schemes so user can complete in their preferred UPI app
+        if (
+            url.startsWith('upi:') ||
+            url.startsWith('phonepe:') ||
+            url.startsWith('tez:') ||
+            url.startsWith('gpay:') ||
+            url.startsWith('paytmmp:') ||
+            url.startsWith('intent:') ||
+            url.startsWith('bhim:') ||
+            url.startsWith('credpay:') ||
+            url.startsWith('whatsapp:')
+        ) {
+            Linking.canOpenURL(url).then((supported) => {
+                if (supported) {
+                    Linking.openURL(url);
+                } else {
+                    Linking.openURL(url).catch((err) => {
+                        console.warn('[WALLET-UPI-INTENT-ERROR]', err);
+                    });
+                }
+            }).catch(() => {
+                Linking.openURL(url).catch((e) => console.warn('[WALLET-UPI-OPEN-FALLBACK-ERR]', e));
+            });
+            return false;
+        }
+
+        // Allow standard HTTP/HTTPS Razorpay checkout URLs inside WebView
+        return true;
     };
 
     const formatDate = (isoString: string) => {
@@ -345,7 +435,7 @@ export default function WalletScreen() {
                         <View className="flex-row items-center">
                             <Text className="text-sm font-inter-bold text-text">Instant Online Recharge</Text>
                             <View className="bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full ml-2">
-                                <Text className="text-[9px] font-inter-bold text-emerald-800 uppercase">Instant</Text>
+                                <Text className="text-[9px] font-inter-bold text-emerald-800 uppercase">In-App</Text>
                             </View>
                         </View>
                         <Text className="text-[11px] font-inter-medium text-text-tertiary mt-1">UPI (GPay, PhonePe, Paytm), Cards, NetBanking</Text>
@@ -508,7 +598,7 @@ export default function WalletScreen() {
                                     </View>
                                     <View>
                                         <Text className="text-base font-inter-bold text-text">Add Money to Wallet</Text>
-                                        <Text className="text-[11px] font-inter-medium text-text-tertiary">Instant UPI & Online Recharge</Text>
+                                        <Text className="text-[11px] font-inter-medium text-text-tertiary">Instant In-App Payment</Text>
                                     </View>
                                 </View>
                                 <TouchableOpacity 
@@ -587,7 +677,7 @@ export default function WalletScreen() {
                                 {isProcessingOrder ? (
                                     <>
                                         <ActivityIndicator size="small" color="#FFF" />
-                                        <Text className="text-white font-inter-bold text-sm ml-2">Connecting to Gateway...</Text>
+                                        <Text className="text-white font-inter-bold text-sm ml-2">Initiating In-App Checkout...</Text>
                                     </>
                                 ) : (
                                     <>
@@ -610,6 +700,120 @@ export default function WalletScreen() {
                     </View>
                 </TouchableWithoutFeedback>
             </Modal>
+
+            {/* In-App Seamless WebView Checkout Modal */}
+            <Modal
+                visible={isCheckoutModalVisible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={handleCloseCheckoutModal}
+            >
+                <View style={[styles.webViewContainer, { paddingTop: insets.top }]}>
+                    {/* Seamless In-App Header */}
+                    <View style={styles.webViewHeader}>
+                        <TouchableOpacity 
+                            onPress={handleCloseCheckoutModal}
+                            style={styles.webViewCloseBtn}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="close" size={22} color="#FFF" />
+                        </TouchableOpacity>
+                        <View style={styles.webViewHeaderCenter}>
+                            <View style={styles.webViewLockRow}>
+                                <Ionicons name="lock-closed" size={13} color="#10B981" />
+                                <Text style={styles.webViewHeaderTitle}>Secure Razorpay Checkout</Text>
+                            </View>
+                            <Text style={styles.webViewHeaderSub}>256-Bit Encrypted In-App Payment</Text>
+                        </View>
+                        <View style={{ width: 36 }} />
+                    </View>
+
+                    {/* In-App Razorpay Checkout WebView */}
+                    {checkoutUrl ? (
+                        <WebView
+                            ref={webViewRef}
+                            source={{ uri: checkoutUrl }}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            thirdPartyCookiesEnabled={true}
+                            sharedCookiesEnabled={true}
+                            originWhitelist={['*']}
+                            onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
+                            setSupportMultipleWindows={false}
+                            onMessage={handleWebViewMessage}
+                            onNavigationStateChange={handleNavigationStateChange}
+                            startInLoadingState={true}
+                            renderLoading={() => (
+                                <View style={styles.webViewLoading}>
+                                    <ActivityIndicator size="large" color="#FFF" />
+                                    <Text style={styles.webViewLoadingText}>Loading Razorpay Checkout...</Text>
+                                </View>
+                            )}
+                            style={styles.webView}
+                        />
+                    ) : null}
+                </View>
+            </Modal>
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    webViewContainer: {
+        flex: 1,
+        backgroundColor: '#111827',
+    },
+    webViewHeader: {
+        height: 56,
+        backgroundColor: '#111827',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1F2937',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+    },
+    webViewCloseBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    webViewHeaderCenter: {
+        alignItems: 'center',
+    },
+    webViewLockRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    webViewHeaderTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#FFF',
+    },
+    webViewHeaderSub: {
+        fontSize: 10,
+        color: '#9CA3AF',
+        marginTop: 1,
+    },
+    webView: {
+        flex: 1,
+        backgroundColor: '#111827',
+    },
+    webViewLoading: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#111827',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
+    webViewLoadingText: {
+        fontSize: 13,
+        color: '#9CA3AF',
+        marginTop: 12,
+        fontWeight: '600',
+    },
+});

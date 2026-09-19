@@ -466,10 +466,14 @@ export default function DriverProfileScreen() {
               <Text className="text-[8px] font-inter-bold text-text-tertiary uppercase tracking-widest mt-0.5 text-center">Jobs</Text>
             </View>
             <View className="w-[1px] h-8 bg-gray-100 mx-1" />
-            <View className="items-center flex-1">
-              <Text className={`${isSmallScreen ? 'text-lg' : 'text-xl'} font-inter-bold text-text`}>₹{String(user?.totalEarnings ?? 0)}</Text>
-              <Text className="text-[8px] font-inter-bold text-text-tertiary uppercase tracking-widest mt-0.5 text-center">Wallet</Text>
-            </View>
+            <TouchableOpacity 
+              onPress={() => router.push('/driver/wallet' as any)}
+              activeOpacity={0.7}
+              className="items-center flex-1"
+            >
+              <Text className={`${isSmallScreen ? 'text-lg' : 'text-xl'} font-inter-bold text-text`}>₹{String(user?.walletBalance ?? user?.totalEarnings ?? 0)}</Text>
+              <Text className="text-[8px] font-inter-bold text-emerald-600 uppercase tracking-widest mt-0.5 text-center">Wallet</Text>
+            </TouchableOpacity>
             <View className="w-[1px] h-8 bg-gray-100 mx-1" />
             <View className="items-center flex-1">
               <View className="flex-row items-center">

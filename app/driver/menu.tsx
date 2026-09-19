@@ -9,7 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const MENU_ITEMS = [
   { id: 'profile', label: 'Driver Profile', icon: 'person-outline' as const, color: '#1B6EF3', route: '/driver/profile' },
-  { id: 'history', label: 'Trip History', icon: 'time-outline' as const, color: '#10B981', route: '/driver/history' },
+  { id: 'wallet', label: 'Driver Wallet & Top-up', icon: 'wallet-outline' as const, color: '#10B981', route: '/driver/wallet' },
+  { id: 'history', label: 'Trip History', icon: 'time-outline' as const, color: '#3B82F6', route: '/driver/history' },
   { id: 'notifications', label: 'Broadcasts', icon: 'notifications-outline' as const, color: '#F59E0B', route: '/driver/notifications' },
   { id: 'safety', label: 'Road Safety', icon: 'shield-checkmark-outline' as const, color: '#EF4444', route: '/driver/safety' },
   { id: 'settings', label: 'Preferences', icon: 'settings-outline' as const, color: '#6366F1', route: '/driver/settings' },

@@ -14,7 +14,8 @@ import {
     KeyboardAvoidingView,
     TouchableWithoutFeedback,
     Keyboard,
-    StyleSheet
+    StyleSheet,
+    NativeModules
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -218,7 +219,13 @@ export default function WalletScreen() {
             setIsTopUpModalVisible(false);
 
             // 1. Official Native Razorpay SDK Dialog (100% In-App, Uber/Swiggy style)
-            if (RazorpayCheckout && typeof RazorpayCheckout.open === 'function') {
+            const hasNativeRazorpayBinary = !!(
+                NativeModules?.RNRazorpayCheckout ||
+                (global as any)?.TurboModuleRegistry?.get?.('RNRazorpayCheckout') ||
+                (global as any)?.__turboModuleProxy?.('RNRazorpayCheckout')
+            );
+
+            if (hasNativeRazorpayBinary && RazorpayCheckout && typeof RazorpayCheckout.open === 'function') {
                 const options = {
                     description: 'Driver Wallet Top-Up',
                     image: 'https://myloadnimble.in/logo.png',

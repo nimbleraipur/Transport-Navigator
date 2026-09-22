@@ -458,35 +458,38 @@ export default function DriverDashboardScreen() {
     };
   }, [showPermissionModal]);
 
-  // Sound and Popup Notification logic for Online Driver
-  const [newRequest, setNewRequest] = useState<any | null>(null);
+  // Incoming Ride Requests Queue (One by One sequential notification)
+  const [incomingQueue, setIncomingQueue] = useState<any[]>([]);
+  const currentIncomingRequest = incomingQueue[0] || null;
 
   useEffect(() => {
     if (!isFocused) {
-      setNewRequest(null);
+      setIncomingQueue([]);
     }
   }, [isFocused]);
 
   const handleAcceptIncomingRequest = async () => {
-    if (!newRequest) return;
+    if (!currentIncomingRequest) return;
+    const bookingId = currentIncomingRequest.id;
     try {
-      const bookingId = newRequest.id;
       const res = await acceptBooking(bookingId);
       if (res.success) {
-        setNewRequest(null);
-        router.push({ pathname: '/driver/active-booking' as any, params: { id: bookingId } });
+        setIncomingQueue([]);
+        router.push(`/driver/active-ride?bookingId=${bookingId}` as any);
       } else {
         Alert.alert('Unable to Accept', res.error || 'This booking may have already been taken or cancelled.');
-        setNewRequest(null);
+        setIncomingQueue((prev) => prev.filter((b) => b.id !== bookingId));
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to accept booking');
-      setNewRequest(null);
+      setIncomingQueue((prev) => prev.filter((b) => b.id !== bookingId));
     }
   };
 
   const handleDeclineIncomingRequest = () => {
-    setNewRequest(null);
+    if (!currentIncomingRequest) return;
+    const currentId = currentIncomingRequest.id;
+    setIncomingQueue((prev) => prev.filter((b) => b.id !== currentId));
   };
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
@@ -552,7 +555,7 @@ export default function DriverDashboardScreen() {
           refreshUser();
         });
 
-        // Real-time booking popup and sound listener
+        // Real-time sequential incoming booking queue listeners
         socket.on('booking:new', (data: { booking: any }) => {
           console.log('[SOCKET] booking:new received on driver dashboard:', data?.booking?.id);
           if (!data?.booking) return;
@@ -563,20 +566,23 @@ export default function DriverDashboardScreen() {
             return;
           }
 
-          console.log('[SOCKET] Showing incoming ride popup for booking:', data.booking.id);
-          setNewRequest(data.booking);
+          console.log('[SOCKET] Enqueueing incoming ride for booking:', data.booking.id);
+          setIncomingQueue((prev) => {
+            if (prev.some((b) => b.id === data.booking.id)) return prev;
+            return [...prev, data.booking];
+          });
         });
 
         socket.on('booking:accepted', (data: { booking: any }) => {
           if (data?.booking?.id) {
-            setNewRequest((prev: any) => (prev?.id === data.booking.id ? null : prev));
+            setIncomingQueue((prev) => prev.filter((b) => b.id !== data.booking.id));
           }
         });
 
         socket.on('booking:cancelled', (data: { bookingId?: string; booking?: any }) => {
           const id = data?.bookingId || data?.booking?.id;
           if (id) {
-            setNewRequest((prev: any) => (prev?.id === id ? null : prev));
+            setIncomingQueue((prev) => prev.filter((b) => b.id !== id));
           }
         });
 
@@ -947,28 +953,6 @@ export default function DriverDashboardScreen() {
         )}
       </ScrollView>
 
-      {/* Real-time New Ride Request Modal Overlay */}
-      {newRequest && (
-        <IncomingRequestModal
-          request={newRequest}
-          onDecline={() => setNewRequest(null)}
-          onAccept={async () => {
-            const bookingId = newRequest.id;
-            try {
-              const result = await acceptBooking(bookingId);
-              if (result.success) {
-                setNewRequest(null);
-                router.push(`/driver/active-ride?bookingId=${bookingId}` as any);
-              } else {
-                Alert.alert('Booking Unsuccessful', result.error || 'This ride is no longer available');
-              }
-            } catch (e) {
-              Alert.alert('Error', 'Something went wrong while accepting the ride');
-            }
-          }}
-        />
-      )}
-
       {/* Custom Permissions Modal */}
       <Modal
         visible={showPermissionModal}
@@ -1101,9 +1085,10 @@ export default function DriverDashboardScreen() {
         </View>
       </Modal>
 
-      {/* Real-time Incoming Ride Request Modal */}
+      {/* Real-time Incoming Sequential Ride Request Floating Notification */}
       <IncomingRequestModal
-        request={newRequest}
+        request={currentIncomingRequest}
+        queueCount={incomingQueue.length}
         onAccept={handleAcceptIncomingRequest}
         onDecline={handleDeclineIncomingRequest}
       />

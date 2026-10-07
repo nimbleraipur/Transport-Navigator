@@ -7,6 +7,8 @@
     "expo:dev": "npx expo start",
     "expo:customer": "cross-env EXPO_PUBLIC_APP_MODE=customer npx expo start",
     "expo:driver": "cross-env EXPO_PUBLIC_APP_MODE=driver npx expo start",
+    "expo:go:driver": "cross-env EXPO_PUBLIC_APP_MODE=driver npx expo start --go --tunnel",
+    "expo:go:customer": "cross-env EXPO_PUBLIC_APP_MODE=customer npx expo start --go --tunnel",
     "expo:start:static:build": "npx expo start --no-dev --minify --localhost",
     "expo:static:build": "node scripts/build.js",
     "start": "npx expo start",
@@ -16,8 +18,14 @@
     "android:driver": "cross-env EXPO_PUBLIC_APP_MODE=driver expo run:android",
     "android:driver:release": "cross-env EXPO_PUBLIC_APP_MODE=driver expo run:android --variant release",
     "ios": "expo run:ios",
+    "ios:customer": "cross-env EXPO_PUBLIC_APP_MODE=customer expo run:ios",
+    "ios:driver": "cross-env EXPO_PUBLIC_APP_MODE=driver expo run:ios",
     "build:customer": "eas build --profile customer --platform android",
-    "build:driver": "eas build --profile driver --platform android"
+    "build:driver": "eas build --profile driver --platform android",
+    "build:ios:customer": "eas build --profile customer --platform ios",
+    "build:ios:driver": "eas build --profile driver --platform ios",
+    "build:ios:customer:sim": "eas build --profile customer-simulator --platform ios",
+    "build:ios:driver:sim": "eas build --profile driver-simulator --platform ios"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

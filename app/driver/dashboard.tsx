@@ -325,7 +325,7 @@ export default function DriverDashboardScreen() {
           const installedVersion = Constants.expoConfig?.version || '1.0.0';
           const latestVersion = data.latestDriverAppVersion || '1.0.0';
           const minVersion = data.minDriverAppVersion || '1.0.0';
-          
+
           const isOutdated = compareVersions(installedVersion, latestVersion) < 0;
           const isForce = data.forceDriverUpdate || compareVersions(installedVersion, minVersion) < 0;
 
@@ -468,6 +468,50 @@ export default function DriverDashboardScreen() {
     }
   }, [isFocused]);
 
+  // Listen for push notifications arriving in Foreground or tapped from Notification Tray
+  useEffect(() => {
+    if (Platform.OS === 'web' || !Notifications) return;
+
+    const notifReceivedSub = Notifications.addNotificationReceivedListener((notification: any) => {
+      const data = notification?.request?.content?.data;
+      if (data?.type === 'new_booking' && data?.bookingId) {
+        console.log('[DASHBOARD] Foreground push received for booking:', data.bookingId);
+        const newBooking = {
+          id: data.bookingId,
+          pickup: { name: data.pickupAddress || 'Pickup Location', area: data.pickupArea || '' },
+          delivery: { name: data.dropAddress || 'Drop Location', area: data.dropArea || '' },
+          totalPrice: data.fare || 0,
+          vehicleType: data.vehicleType || 'Vehicle',
+          distance: parseFloat(data.distance || '5'),
+          estimatedTime: data.estimatedTime || 15,
+        };
+        setIncomingQueue((prev) => (prev.some((b) => b.id === newBooking.id) ? prev : [...prev, newBooking]));
+      }
+    });
+
+    const notifResponseSub = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      const data = response?.notification?.request?.content?.data;
+      if (data?.type === 'new_booking' && data?.bookingId) {
+        console.log('[DASHBOARD] Notification tapped for booking:', data.bookingId);
+        const newBooking = {
+          id: data.bookingId,
+          pickup: { name: data.pickupAddress || 'Pickup Location', area: data.pickupArea || '' },
+          delivery: { name: data.dropAddress || 'Drop Location', area: data.dropArea || '' },
+          totalPrice: data.fare || 0,
+          vehicleType: data.vehicleType || 'Vehicle',
+          distance: parseFloat(data.distance || '5'),
+          estimatedTime: data.estimatedTime || 15,
+        };
+        setIncomingQueue((prev) => (prev.some((b) => b.id === newBooking.id) ? prev : [...prev, newBooking]));
+      }
+    });
+
+    return () => {
+      notifReceivedSub.remove();
+      notifResponseSub.remove();
+    };
+  }, []);
+
   const handleAcceptIncomingRequest = async () => {
     if (!currentIncomingRequest) return;
     const bookingId = currentIncomingRequest.id;
@@ -605,8 +649,8 @@ export default function DriverDashboardScreen() {
           const deltaLambda = (lon2 - lon1) * Math.PI / 180;
 
           const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-                    Math.cos(phi1) * Math.cos(phi2) *
-                    Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
           return R * c;
@@ -633,7 +677,7 @@ export default function DriverDashboardScreen() {
 
                 // Emit if: moved > 12 meters, or moved > 2 meters and > 15s elapsed
                 const shouldEmit = distance > 12 || (elapsed > 15000 && distance > 2);
-                
+
                 if (!shouldEmit) {
                   return;
                 }
@@ -694,7 +738,7 @@ export default function DriverDashboardScreen() {
         try {
           const cached = await AsyncStorage.getItem('expo_push_token');
           if (cached) pushToken = cached;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const baseUrl = getApiUrl();
@@ -724,13 +768,13 @@ export default function DriverDashboardScreen() {
 
   const handleModalGoOnline = async () => {
     setShowPermissionModal(false);
-    
+
     // Re-verify location and availability
     setIsTogglingOnline(true);
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
-      
+
       if (cityCheck.error) {
         Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
         setIsTogglingOnline(false);
@@ -745,7 +789,7 @@ export default function DriverDashboardScreen() {
 
   const handleToggleOnline = async () => {
     if (isTogglingOnline) return;
-    
+
     // If turning online, check location first
     if (!user?.isOnline) {
       setIsTogglingOnline(true);
@@ -767,7 +811,7 @@ export default function DriverDashboardScreen() {
 
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
-        
+
         if (cityCheck.error) {
           Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
           setIsTogglingOnline(false);
@@ -963,7 +1007,7 @@ export default function DriverDashboardScreen() {
         <View className="flex-1 justify-end bg-black/60">
           <View className="bg-surface rounded-t-[32px] p-6 pb-8 border-t border-gray-100 shadow-2xl">
             <View className="w-12 h-1 bg-gray-200 rounded-full align-self-center mx-auto mb-6" />
-            
+
             <View className="items-center mb-6">
               <View className="w-14 h-14 bg-primary/10 rounded-full items-center justify-center mb-3">
                 <MaterialCommunityIcons name="shield-check-outline" size={32} color={Colors.primary} />
@@ -1070,7 +1114,7 @@ export default function DriverDashboardScreen() {
               >
                 <Text className="text-sm font-inter-bold text-text-secondary">Cancel</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 onPress={handleModalGoOnline}
                 disabled={!(permissionStates.notifications && permissionStates.overlay && permissionStates.battery)}

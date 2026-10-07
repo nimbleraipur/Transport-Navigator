@@ -546,7 +546,7 @@ export default function TrackRideScreen() {
                 {displayBooking.driverName && (
                   <AnimatedCard delay={100} className="bg-white rounded-3xl p-5 mb-5 shadow-2xl shadow-black/5 border border-gray-50">
                     <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center flex-1">
+                      <View className="flex-row items-center flex-1 mr-3">
                         <View className="w-14 h-14 rounded-2xl bg-primary/5 items-center justify-center mr-4 border border-primary/10 shadow-sm overflow-hidden">
                           {displayBooking.driverProfileSelfie ? (
                             <Image source={{ uri: displayBooking.driverProfileSelfie }} className="w-full h-full" resizeMode="cover" />
@@ -572,9 +572,26 @@ export default function TrackRideScreen() {
                       </View>
                       <TouchableOpacity
                         onPress={() => displayBooking.driverPhone && Linking.openURL(`tel:${displayBooking.driverPhone}`)}
-                        className="w-12 h-12 rounded-2xl bg-success items-center justify-center shadow-lg shadow-success/30"
+                        style={{
+                          height: 44,
+                          paddingHorizontal: 12,
+                          borderRadius: 14,
+                          backgroundColor: Colors.success,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          shadowColor: Colors.success,
+                          shadowOffset: { width: 0, height: 3 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 6,
+                          elevation: 4,
+                        }}
+                        activeOpacity={0.8}
                       >
-                        <Ionicons name="call" size={22} color="#FFF" />
+                        <Ionicons name="call" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>
+                          Call to Driver
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </AnimatedCard>
@@ -646,14 +663,16 @@ export default function TrackRideScreen() {
                         </View>
                         {displayBooking.driverBankDetails.qrCode && (
                           <View className="items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                            <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-wider mb-3">Instant Scan & Pay</Text>
-                            <Image
-                              source={{ uri: displayBooking.driverBankDetails.qrCode }}
-                              className="w-40 h-40 rounded-xl"
-                              resizeMode="contain"
-                            />
-                            <Text className="text-[10px] font-inter-medium text-text-tertiary mt-3 text-center">
-                              Scan this code in any UPI app to pay ₹{displayBooking.totalPrice}
+                            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-wider mb-3">Instant Scan & Pay</Text>
+                            <View style={{ width: 220, height: 220 }} className="bg-white p-2.5 rounded-2xl border border-gray-200 items-center justify-center shadow-sm">
+                              <Image
+                                source={{ uri: displayBooking.driverBankDetails.qrCode }}
+                                className="w-full h-full rounded-xl"
+                                resizeMode="contain"
+                              />
+                            </View>
+                            <Text className="text-xs font-inter-medium text-text-secondary mt-3 text-center">
+                              Scan this code in any UPI app to pay <Text className="font-inter-bold text-primary">₹{displayBooking.totalPrice}</Text>
                             </Text>
                           </View>
                         )}

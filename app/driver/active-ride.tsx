@@ -101,11 +101,27 @@ function AnimatedStepIndicator({ step, index, currentStep }: { step: string; ind
 function PulsingCallButton({ onPress }: { onPress: () => void }) {
   return (
     <TouchableOpacity
-      style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.success, alignItems: 'center', justifyContent: 'center' }}
+      style={{
+        height: 44,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        backgroundColor: Colors.success,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: Colors.success,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        elevation: 4,
+      }}
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <Ionicons name="call" size={20} color="#FFF" />
+      <Ionicons name="call" size={16} color="#FFF" style={{ marginRight: 6 }} />
+      <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFF' }}>
+        Call to Customer
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -126,12 +142,13 @@ export default function DriverActiveRideScreen() {
   const router = useRouter();
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const insets = useSafeAreaInsets();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { fetchBookings, getBookingById, startTrip, completeTrip, cancelBooking, confirmPayment } = useBookings();
   const { addNotification } = useNotifications();
   const [otp, setOtp] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -188,11 +205,11 @@ export default function DriverActiveRideScreen() {
               const deltaLambda = (newLng - lastEmittedLoc.lng) * Math.PI / 180;
 
               const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-                        Math.cos(phi1) * Math.cos(phi2) *
-                        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+                Math.cos(phi1) * Math.cos(phi2) *
+                Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
               const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
               const distance = R * c;
-              
+
               const elapsed = now - lastEmittedTime;
 
               // Active ride: moved > 6 meters, or moved > 1.5 meters and > 8s elapsed
@@ -277,22 +294,21 @@ export default function DriverActiveRideScreen() {
   };
 
   const handleCompleteDelivery = async () => {
-    if (completing || !bookingId || hasNavigatedAfterCompletion.current) return;
+    if (completing || !bookingId) return;
     setCompleting(true);
     try {
       const result = await completeTrip(bookingId);
       if (result.success) {
         hasNavigatedAfterCompletion.current = true;
-        setTimeout(() => {
-          router.replace('/driver/dashboard' as any);
-        }, 600);
+        await refreshUser();
+        setShowCompletionModal(true);
       } else {
         Alert.alert('Unable to Complete', result.error || 'Server rejected the request.');
       }
     } catch (e: any) {
       Alert.alert('Network Error', 'Failed to communicate with the server.');
     } finally {
-      setTimeout(() => setCompleting(false), 1000);
+      setCompleting(false);
     }
   };
 
@@ -360,6 +376,8 @@ export default function DriverActiveRideScreen() {
     );
   }
 
+  const driverQrCode = user?.bankDetails?.qrCode || (user as any)?.qrPhoto || (user as any)?.documents?.qrPhoto;
+
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-[#F8FAFC]"
@@ -416,20 +434,37 @@ export default function DriverActiveRideScreen() {
         </View>
 
         {/* 3. Job Quick Info Bar */}
-        <View className="flex-row items-center justify-between px-6 py-5 bg-white border-b border-slate-100">
+        <View className="flex-row items-center justify-between px-6 py-4 bg-white border-b border-slate-100">
           <View>
             <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Job Reference</Text>
             <Text className="text-lg font-extrabold text-slate-800">#{bookingId?.slice(-6).toUpperCase()}</Text>
           </View>
           <View className="flex-row items-center">
-            <View className="bg-primary/10 px-4 py-2 rounded-2xl mr-3">
+            <View className="bg-primary/10 px-3 py-1.5 rounded-xl mr-2.5">
               <Text className="text-[11px] font-bold text-primary uppercase tracking-wider">{booking.status.replace('_', ' ')}</Text>
             </View>
             <TouchableOpacity
               onPress={handleCallCustomer}
-              className="w-11 h-11 bg-success rounded-full items-center justify-center shadow-lg shadow-success/30"
+              style={{
+                height: 38,
+                paddingHorizontal: 11,
+                borderRadius: 11,
+                backgroundColor: Colors.success,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: Colors.success,
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.25,
+                shadowRadius: 5,
+                elevation: 3,
+              }}
+              activeOpacity={0.8}
             >
-              <Ionicons name="call" size={20} color="#FFF" />
+              <Ionicons name="call" size={15} color="#FFF" style={{ marginRight: 5 }} />
+              <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#FFF' }}>
+                Call to Customer
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -596,9 +631,21 @@ export default function DriverActiveRideScreen() {
             </AnimatedCard>
           )}
 
+          {booking.status === 'completed' && (
+            <AnimatedCard index={3} className="mb-5">
+              <TouchableOpacity
+                onPress={() => router.replace('/driver/dashboard' as any)}
+                activeOpacity={0.85}
+                className="h-14 rounded-2xl bg-slate-900 items-center justify-center shadow-lg"
+              >
+                <Text className="text-base font-inter-bold text-white">Return to Dashboard</Text>
+              </TouchableOpacity>
+            </AnimatedCard>
+          )}
+
           <AnimatedCard index={4} className="bg-white rounded-2xl p-6 border border-gray-50 shadow-sm">
-            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[2px] mb-5">Financials</Text>
-            <View className="flex-row items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100 mb-5">
+            <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-[2px] mb-5">Financials & Collection</Text>
+            <View className="flex-row items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100 mb-4">
               <View>
                 <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-0.5">Total Payout</Text>
                 <Text className="text-2xl font-inter-bold text-text">₹{booking.totalPrice}</Text>
@@ -607,20 +654,53 @@ export default function DriverActiveRideScreen() {
                 <MaterialCommunityIcons name="wallet" size={24} color={Colors.success} />
               </View>
             </View>
-            {/* <View className="flex-row items-center space-x-3 px-1">
-              <View className={`w-7 h-7 rounded-lg items-center justify-center ${booking.paymentMethod === 'cash' ? 'bg-orange-50' : 'bg-blue-50'}`}>
-                <Ionicons name={booking.paymentMethod === 'cash' ? 'cash' : 'card'} size={14} color={booking.paymentMethod === 'cash' ? '#F59E0B' : '#1B6EF3'} />
+
+            {/* Driver Payment QR Code or Add QR Button */}
+            {driverQrCode ? (
+              <View className="items-center bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-4">
+                <Text className="text-[10px] font-inter-bold text-text-tertiary uppercase tracking-widest mb-2.5">
+                  Your Payment QR Code
+                </Text>
+                <View className="w-44 h-44 bg-white p-2 rounded-xl border border-gray-200 items-center justify-center shadow-sm">
+                  <Image
+                    source={{ uri: driverQrCode }}
+                    className="w-full h-full"
+                    resizeMode="contain"
+                  />
+                </View>
+                {user?.bankDetails?.upiId ? (
+                  <Text className="text-xs font-inter-medium text-text-secondary mt-2">
+                    UPI: <Text className="font-inter-bold text-primary">{user.bankDetails.upiId}</Text>
+                  </Text>
+                ) : null}
               </View>
-              <Text className="text-xs font-inter-bold text-text-secondary uppercase tracking-widest">
-                {booking.paymentMethod === 'cash' ? 'Collect Cash' : 'UPI Verified'}
-              </Text>
-            </View> */}
+            ) : (
+              <View className="items-center bg-amber-50/60 p-4 rounded-2xl border border-dashed border-amber-300 mb-4">
+                <View className="w-10 h-10 rounded-full bg-amber-100 items-center justify-center mb-1.5">
+                  <Ionicons name="qr-code-outline" size={20} color="#D97706" />
+                </View>
+                <Text className="text-xs font-inter-bold text-slate-800">
+                  No Payment QR Added
+                </Text>
+                <Text className="text-[11px] font-inter text-slate-500 text-center mt-0.5 mb-3">
+                  Upload your UPI QR code so customers can pay you directly.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/driver/profile' as any)}
+                  activeOpacity={0.8}
+                  className="flex-row items-center bg-primary px-4 py-2 rounded-xl shadow-sm"
+                >
+                  <Ionicons name="add-circle-outline" size={14} color="#FFF" />
+                  <Text className="text-xs font-inter-bold text-white ml-1.5">Add / Upload QR Code</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {booking.paymentMethod === 'upi' && booking.status !== 'pending' && booking.paymentStatus !== 'confirmed' && (
               <TouchableOpacity
                 onPress={handleConfirmPayment}
                 disabled={confirmingPayment}
-                className="mt-6 h-12 rounded-xl bg-primary/10 items-center justify-center border border-primary/20"
+                className="mt-2 h-12 rounded-xl bg-primary/10 items-center justify-center border border-primary/20"
                 activeOpacity={0.7}
               >
                 {confirmingPayment ? (
@@ -635,7 +715,7 @@ export default function DriverActiveRideScreen() {
             )}
 
             {booking.paymentStatus === 'confirmed' && (
-              <View className="mt-6 p-4 bg-success/5 rounded-xl border border-success/10 flex-row items-center justify-center">
+              <View className="mt-2 p-4 bg-success/5 rounded-xl border border-success/10 flex-row items-center justify-center">
                 <Ionicons name="shield-checkmark" size={16} color={Colors.success} />
                 <Text className="ml-2 text-[10px] font-bold text-success uppercase">Payment Finalized & Verified</Text>
               </View>
@@ -643,6 +723,103 @@ export default function DriverActiveRideScreen() {
           </AnimatedCard>
         </View>
       </ScrollView>
+
+      {/* Mission Completed & Payment QR Collection Modal */}
+      <Modal
+        visible={showCompletionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowCompletionModal(false);
+          router.replace('/driver/dashboard' as any);
+        }}
+      >
+        <View className="flex-1 bg-black/60 justify-end">
+          <View
+            className="bg-white rounded-t-[32px] p-6 shadow-2xl"
+            style={{ paddingBottom: Math.max(bottomInset, 20) + 10, maxHeight: '90%' }}
+          >
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Header */}
+              <View className="items-center mb-4 pt-2">
+                <View className="w-16 h-16 rounded-full bg-emerald-100 items-center justify-center mb-3">
+                  <Ionicons name="checkmark-circle" size={42} color="#059669" />
+                </View>
+                <Text className="text-2xl font-inter-bold text-slate-900">Mission Completed!</Text>
+                <Text className="text-xs font-inter text-slate-500 mt-1">
+                  Ride completed for {booking.customerName || 'Customer'}
+                </Text>
+              </View>
+
+              {/* Amount to collect */}
+              <View className="bg-slate-50 p-4 rounded-2xl border border-slate-100 items-center mb-2">
+                <Text className="text-[10px] font-inter-bold text-slate-400 uppercase tracking-widest mb-1">
+                  Total Fare to Collect
+                </Text>
+                <Text className="text-3xl font-inter-black text-slate-900">
+                  ₹{booking.totalPrice}
+                </Text>
+              </View>
+
+              {/* QR Code or Add QR Button */}
+              {driverQrCode ? (
+                <View className="items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 my-3">
+                  <Text className="text-[11px] font-inter-bold text-slate-500 uppercase tracking-widest mb-3">
+                    Customer Scan & Pay QR
+                  </Text>
+                  <View style={{ width: 280, height: 280 }} className="bg-white p-3 rounded-2xl border border-slate-200 items-center justify-center shadow-md">
+                    <Image
+                      source={{ uri: driverQrCode }}
+                      className="w-full h-full"
+                      resizeMode="contain"
+                    />
+                  </View>
+                  {user?.bankDetails?.upiId ? (
+                    <Text className="text-xs font-inter-medium text-slate-600 mt-3">
+                      UPI ID: <Text className="font-inter-bold text-primary">{user.bankDetails.upiId}</Text>
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View className="items-center bg-amber-50/70 p-5 rounded-2xl border border-dashed border-amber-300 my-3">
+                  <View className="w-12 h-12 rounded-full bg-amber-100 items-center justify-center mb-2">
+                    <Ionicons name="qr-code-outline" size={26} color="#D97706" />
+                  </View>
+                  <Text className="text-sm font-inter-bold text-slate-800 text-center">
+                    No Payment QR Added
+                  </Text>
+                  <Text className="text-xs font-inter text-slate-500 text-center mt-1 mb-4 leading-4 px-2">
+                    Upload your UPI QR code so customers can scan and pay you directly.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowCompletionModal(false);
+                      router.push('/driver/profile' as any);
+                    }}
+                    activeOpacity={0.8}
+                    className="flex-row items-center bg-primary px-5 py-2.5 rounded-xl shadow-md shadow-primary/25"
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color="#FFF" />
+                    <Text className="text-xs font-inter-bold text-white ml-2">Add / Upload QR Code</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Action Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCompletionModal(false);
+                  router.replace('/driver/dashboard' as any);
+                }}
+                activeOpacity={0.85}
+                className="w-full h-14 rounded-2xl bg-emerald-600 items-center justify-center shadow-lg shadow-emerald-600/30 mt-3"
+              >
+                <Text className="text-base font-inter-bold text-white">Done & Return to Dashboard</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={cancelModalVisible} transparent animationType="fade" onRequestClose={() => setCancelModalVisible(false)}>
         <View className="flex-1 bg-black/60 justify-end">

@@ -82,6 +82,21 @@ if (TaskManager && Notifications) {
                     id: 'default',
                     launchActivity: 'default',
                   },
+                  actions: [
+                    {
+                      title: '🟢 Accept Ride',
+                      pressAction: {
+                        id: 'accept_ride',
+                        launchActivity: 'default',
+                      },
+                    },
+                    {
+                      title: '🔴 Cancel',
+                      pressAction: {
+                        id: 'decline_ride',
+                      },
+                    },
+                  ],
                 },
               });
             }
@@ -293,6 +308,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           lightColor: '#FF231F7C',
           sound: 'default', // Fallback to system default sound for reliable background alerting
         });
+
+        await Notifications.setNotificationCategoryAsync('new_booking_category', [
+          {
+            identifier: 'ACCEPT_RIDE',
+            buttonTitle: '🟢 Accept Ride',
+            options: {
+              opensAppToForeground: true,
+            },
+          },
+          {
+            identifier: 'DECLINE_RIDE',
+            buttonTitle: '🔴 Cancel',
+            options: {
+              opensAppToForeground: false,
+            },
+          },
+        ]);
       }
     } catch (e) {
       console.warn('Notification permission or token registration error', e);

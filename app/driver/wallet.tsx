@@ -241,6 +241,24 @@ export default function WalletScreen() {
                     },
                     theme: {
                         color: '#111827'
+                    },
+                    config: {
+                        display: {
+                            blocks: {
+                                upi: {
+                                    name: 'UPI (GPay, PhonePe, Paytm, QR)',
+                                    instruments: [{ method: 'upi' }]
+                                },
+                                other: {
+                                    name: 'Cards / Netbanking / Wallets',
+                                    instruments: [{ method: 'card' }, { method: 'netbanking' }, { method: 'wallet' }]
+                                }
+                            },
+                            sequence: ['block.upi', 'block.other'],
+                            preferences: {
+                                show_default_blocks: true
+                            }
+                        }
                     }
                 };
 

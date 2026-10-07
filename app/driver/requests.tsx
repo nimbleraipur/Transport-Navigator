@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { io } from 'socket.io-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBookings, BookingData } from '@/contexts/BookingContext';
@@ -23,6 +24,26 @@ import { getApiUrl } from '@/lib/query-client';
 import Colors from '@/constants/colors';
 import { getVehicleImageSource } from '@/lib/vehicles';
 import { useBookingSound } from '@/lib/useBookingSound';
+
+function calculateDistanceKm(
+  lat1?: number,
+  lon1?: number,
+  lat2?: number,
+  lon2?: number
+): number | null {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const R = 6371; // km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(1));
+}
 
 function getTimeAgo(dateString: string) {
   const diff = Date.now() - new Date(dateString).getTime();
@@ -92,12 +113,14 @@ function ShimmerButton({ onPress, disabled, isLoading }: { onPress: () => void; 
 function AnimatedRequestCard({
   item,
   index,
+  driverLocation,
   acceptingId,
   onAccept,
   getVehicleIcon,
 }: {
   item: BookingData;
   index: number;
+  driverLocation?: { lat: number; lng: number } | null;
   acceptingId: string | null;
   onAccept: (id: string) => void;
   getVehicleIcon: (type: string) => string;
@@ -117,6 +140,23 @@ function AnimatedRequestCard({
       Animated.spring(badgeBounce, { toValue: 1, friction: 4, tension: 200, useNativeDriver: true }).start();
     });
   }, []);
+
+  const driverLat = driverLocation?.lat;
+  const driverLng = driverLocation?.lng;
+
+  const pickupDistFromDriver = calculateDistanceKm(
+    driverLat,
+    driverLng,
+    item.pickup?.lat,
+    item.pickup?.lng
+  );
+
+  const dropDistFromDriver = calculateDistanceKm(
+    driverLat,
+    driverLng,
+    item.delivery?.lat,
+    item.delivery?.lng
+  );
 
   return (
     <Animated.View
@@ -171,15 +211,46 @@ function AnimatedRequestCard({
             </View>
           </View>
           <View className="flex-1">
+            {/* Pickup Location */}
             <View className="mb-4">
-              <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] mb-0.5">Pickup</Text>
+              <View className="flex-row items-center justify-between mb-1">
+                <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px]">Pickup</Text>
+                {pickupDistFromDriver != null && (
+                  <View style={styles.distanceBadge}>
+                    <Text style={styles.distanceBadgeText}>
+                      {pickupDistFromDriver} km from you
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text className="text-[13px] font-inter-semibold text-text" numberOfLines={1}>{item.pickup.name}</Text>
-              <Text className="text-[11px] font-inter text-text-secondary mt-0.5" numberOfLines={1}>{item.pickup.area}</Text>
+              {!!item.pickup?.area && (
+                <Text className="text-[11px] font-inter text-text-secondary mt-0.5" numberOfLines={1}>{item.pickup.area}</Text>
+              )}
             </View>
+
+            {/* Drop Location */}
             <View>
-              <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px] mb-0.5">Drop</Text>
+              <View className="flex-row items-center justify-between mb-1">
+                <Text className="text-[9px] font-inter-bold text-text-tertiary uppercase tracking-[1.5px]">Drop</Text>
+                {dropDistFromDriver != null ? (
+                  <View style={styles.distanceBadge}>
+                    <Text style={styles.distanceBadgeText}>
+                      {dropDistFromDriver} km from you
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.distanceBadge}>
+                    <Text style={styles.distanceBadgeText}>
+                      {(item.distance || 0).toFixed(1)} km trip
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text className="text-[13px] font-inter-semibold text-text" numberOfLines={1}>{item.delivery.name}</Text>
-              <Text className="text-[11px] font-inter text-text-secondary mt-0.5" numberOfLines={1}>{item.delivery.area}</Text>
+              {!!item.delivery?.area && (
+                <Text className="text-[11px] font-inter text-text-secondary mt-0.5" numberOfLines={1}>{item.delivery.area}</Text>
+              )}
             </View>
           </View>
         </View>
@@ -262,9 +333,31 @@ export default function DriverRequestsScreen() {
   const [pendingBookings, setPendingBookings] = useState<BookingData[]>([]);
   const [loading, setLoading] = useState(true);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const prevCountRef = useRef<number>(-1);
   const { playBookingAlert, stopBookingAlert } = useBookingSound();
   const isFocused = useIsFocused();
+
+  // Fetch driver live coordinates
+  const fetchDriverLocation = useCallback(async () => {
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (loc?.coords) {
+        setDriverLocation({
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      fetchDriverLocation();
+    }
+  }, [isFocused, fetchDriverLocation]);
 
   useEffect(() => {
     if (!isFocused) {
@@ -384,6 +477,7 @@ export default function DriverRequestsScreen() {
             <AnimatedRequestCard
               item={item}
               index={index}
+              driverLocation={driverLocation}
               acceptingId={acceptingId}
               onAccept={handleAccept}
               getVehicleIcon={getVehicleIcon}
@@ -399,4 +493,19 @@ export default function DriverRequestsScreen() {
   );
 }
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  distanceBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  distanceBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#666666',
+  },
+});
+

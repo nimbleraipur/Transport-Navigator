@@ -6,20 +6,38 @@ import {
   StyleSheet,
   Animated,
   ActivityIndicator,
-  Dimensions,
   Platform,
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import { BookingData } from '@/contexts/BookingContext';
-import Colors from '@/constants/colors';
 import { useBookingSound } from '@/lib/useBookingSound';
 
-const { width } = Dimensions.get('window');
+function calculateDistanceKm(
+  lat1?: number,
+  lon1?: number,
+  lat2?: number,
+  lon2?: number
+): number | null {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const R = 6371; // km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((R * c).toFixed(1));
+}
 
 interface IncomingRequestModalProps {
   request: BookingData | null;
   queueCount?: number;
+  driverLocation?: { lat: number; lng: number } | null;
   onAccept: () => Promise<void>;
   onDecline: () => void;
 }
@@ -27,40 +45,41 @@ interface IncomingRequestModalProps {
 export function IncomingRequestModal({
   request,
   queueCount = 1,
+  driverLocation,
   onAccept,
   onDecline,
 }: IncomingRequestModalProps) {
   const insets = useSafeAreaInsets();
   const [timeLeft, setTimeLeft] = useState(30);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [currentDriverCoords, setCurrentDriverCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(driverLocation || null);
+
   const { playBookingAlert, stopBookingAlert } = useBookingSound();
 
   const timerRef = useRef<any>(null);
   const progressAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(-300)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Pulse animation for the "LIVE REQUEST" indicator
+  // Fetch live driver location if not passed in props
   useEffect(() => {
-    if (!request) return;
-
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.25,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1.0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [request]);
+    if (driverLocation) {
+      setCurrentDriverCoords(driverLocation);
+    } else {
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        .then((loc) => {
+          if (loc?.coords) {
+            setCurrentDriverCoords({
+              lat: loc.coords.latitude,
+              lng: loc.coords.longitude,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [driverLocation, request?.id]);
 
   // Main countdown and slide-in effect
   useEffect(() => {
@@ -148,6 +167,24 @@ export function IncomingRequestModal({
 
   const topPosition = Math.max(insets.top, 16) + 6;
 
+  // Calculate distance from driver's location to pickup & drop
+  const driverLat = currentDriverCoords?.lat;
+  const driverLng = currentDriverCoords?.lng;
+
+  const pickupDistFromDriver = calculateDistanceKm(
+    driverLat,
+    driverLng,
+    request.pickup?.lat,
+    request.pickup?.lng
+  );
+
+  const dropDistFromDriver = calculateDistanceKm(
+    driverLat,
+    driverLng,
+    request.delivery?.lat,
+    request.delivery?.lng
+  );
+
   return (
     <Animated.View
       style={[
@@ -176,51 +213,34 @@ export function IncomingRequestModal({
         </View>
 
         <View style={styles.content}>
-          {/* Header Row: Badge, Queue Counter, Countdown */}
-          <View style={styles.headerRow}>
-            <View style={styles.badgeGroup}>
-              <View style={styles.liveBadge}>
-                <Animated.View
-                  style={[styles.liveDot, { transform: [{ scale: pulseAnim }] }]}
-                />
-                <Text style={styles.liveText}>NEW RIDE REQUEST</Text>
+          {/* 1. TOP HEADER: Clean Black & White (Price, Vehicle Tag & Timer) */}
+          <View style={styles.topRow}>
+            <View style={styles.priceGroup}>
+              <Text style={styles.priceValue}>₹{request.totalPrice}</Text>
+              <View style={styles.vehicleChip}>
+                <Text style={styles.vehicleText}>
+                  {request.vehicleType || 'Vehicle'}
+                </Text>
               </View>
+            </View>
+
+            <View style={styles.headerRight}>
               {queueCount > 1 && (
                 <View style={styles.queueBadge}>
-                  <Text style={styles.queueText}>+{(queueCount - 1)} in queue</Text>
+                  <Text style={styles.queueText}>+{queueCount - 1} in queue</Text>
                 </View>
               )}
-            </View>
-
-            <View style={styles.timerBadge}>
-              <Ionicons name="time-outline" size={13} color="#EF4444" />
-              <Text style={styles.timerText}>{timeLeft}s</Text>
-            </View>
-          </View>
-
-          {/* 1. TOP: Price & Ride Specs */}
-          <View style={styles.priceSection}>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>ESTIMATED EARNINGS</Text>
-              <Text style={styles.priceValue}>₹{request.totalPrice}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <View style={styles.metaChip}>
-                <MaterialCommunityIcons name="truck-fast" size={13} color="#2563EB" />
-                <Text style={styles.metaChipText}>{request.vehicleType || 'Truck'}</Text>
+              <View style={styles.timerBadge}>
+                <Ionicons name="time-outline" size={13} color="#FFFFFF" />
+                <Text style={styles.timerText}>{timeLeft}s</Text>
               </View>
-              <Text style={styles.metaDot}>•</Text>
-              <Text style={styles.metaInfo}>{(request.distance || 0).toFixed(1)} km</Text>
-              <Text style={styles.metaDot}>•</Text>
-              <Text style={styles.metaInfo}>{request.estimatedTime || 15} mins</Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
-          {/* 2. MIDDLE: Pickup Location then Drop Location */}
+          {/* 2. MIDDLE ROUTE: Black & White Clean Timeline */}
           <View style={styles.routeSection}>
-            {/* Connecting Vertical Line */}
             <View style={styles.routeLine} />
 
             {/* Pickup Location */}
@@ -229,9 +249,16 @@ export function IncomingRequestModal({
                 <View style={styles.pickupDotInner} />
               </View>
               <View style={styles.locationTextContainer}>
-                <Text style={styles.locationTypeLabel}>PICKUP LOCATION</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.locationTypeLabel}>PICKUP</Text>
+                  {pickupDistFromDriver != null && (
+                    <Text style={styles.distanceBadge}>
+                      {pickupDistFromDriver} km from you
+                    </Text>
+                  )}
+                </View>
                 <Text style={styles.locationMainText} numberOfLines={1}>
-                  {request.pickup?.name || 'Pickup Address'}
+                  {request.pickup?.name || 'Pickup Location'}
                 </Text>
                 {!!request.pickup?.area && (
                   <Text style={styles.locationSubText} numberOfLines={1}>
@@ -247,9 +274,20 @@ export function IncomingRequestModal({
                 <View style={styles.dropDotInner} />
               </View>
               <View style={styles.locationTextContainer}>
-                <Text style={styles.locationTypeLabel}>DROP LOCATION</Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.locationTypeLabel}>DROP</Text>
+                  {dropDistFromDriver != null ? (
+                    <Text style={styles.distanceBadge}>
+                      {dropDistFromDriver} km from you
+                    </Text>
+                  ) : (
+                    <Text style={styles.distanceBadge}>
+                      {(request.distance || 0).toFixed(1)} km trip
+                    </Text>
+                  )}
+                </View>
                 <Text style={styles.locationMainText} numberOfLines={1}>
-                  {request.delivery?.name || 'Drop Address'}
+                  {request.delivery?.name || 'Drop Location'}
                 </Text>
                 {!!request.delivery?.area && (
                   <Text style={styles.locationSubText} numberOfLines={1}>
@@ -260,20 +298,20 @@ export function IncomingRequestModal({
             </View>
           </View>
 
-          {/* 3. BOTTOM: 2 Action Buttons (Decline / Cancel & Accept) */}
+          {/* 3. BOTTOM: 2 Clean Action Buttons */}
           <View style={styles.actionRow}>
-            {/* Left Button: Decline / Cancel */}
+            {/* Cancel Button */}
             <TouchableOpacity
               onPress={handleDecline}
               disabled={isAccepting}
               style={styles.cancelButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+              <Ionicons name="close" size={17} color="#000000" />
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
-            {/* Right Button: Accept Ride */}
+            {/* Accept Button */}
             <TouchableOpacity
               onPress={handleAccept}
               disabled={isAccepting}
@@ -284,7 +322,11 @@ export function IncomingRequestModal({
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <View style={styles.acceptButtonContent}>
-                  <MaterialCommunityIcons name="steering" size={19} color="#FFFFFF" />
+                  <MaterialCommunityIcons
+                    name="steering"
+                    size={18}
+                    color="#FFFFFF"
+                  />
                   <Text style={styles.acceptButtonText}>Accept Ride</Text>
                 </View>
               )}
@@ -316,11 +358,11 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#000000',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.22,
+        shadowOpacity: 0.18,
         shadowRadius: 14,
       },
       android: {
-        elevation: 18,
+        elevation: 16,
       },
     }),
   },
@@ -331,129 +373,75 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#10B981',
+    backgroundColor: '#000000',
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
-  headerRow: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  badgeGroup: {
+  priceGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  priceValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#000000',
+    letterSpacing: -0.5,
+  },
+  vehicleChip: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  vehicleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000000',
+    textTransform: 'capitalize',
+  },
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  liveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 3.5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 5,
-  },
-  liveText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#065F46',
-    letterSpacing: 0.8,
-  },
   queueBadge: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F3F4F6',
     paddingHorizontal: 7,
     paddingVertical: 3.5,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#E5E7EB',
   },
   queueText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: '#000000',
   },
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#000000',
     paddingHorizontal: 8,
     paddingVertical: 3.5,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    gap: 3,
+    gap: 4,
   },
   timerText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#B91C1C',
-  },
-  priceSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
-    marginBottom: 8,
-  },
-  priceRow: {
-    justifyContent: 'center',
-  },
-  priceLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#6B7280',
-    letterSpacing: 0.7,
-    marginBottom: 1,
-  },
-  priceValue: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#111827',
-    letterSpacing: -0.5,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
-  },
-  metaChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  metaChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1F2937',
-    textTransform: 'capitalize',
-  },
-  metaDot: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    marginHorizontal: 5,
-  },
-  metaInfo: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4B5563',
+    color: '#FFFFFF',
   },
   divider: {
     height: 1,
@@ -463,7 +451,7 @@ const styles = StyleSheet.create({
   },
   routeSection: {
     position: 'relative',
-    marginVertical: 4,
+    marginVertical: 3,
   },
   routeLine: {
     position: 'absolute',
@@ -471,7 +459,7 @@ const styles = StyleSheet.create({
     top: 14,
     bottom: 14,
     width: 1.5,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: '#E5E7EB',
   },
   locationItem: {
     flexDirection: 'row',
@@ -487,17 +475,17 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#DCFCE7',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#86EFAC',
+    borderWidth: 2,
+    borderColor: '#000000',
   },
   pickupDotInner: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#16A34A',
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#000000',
   },
   dropDotOuter: {
     position: 'absolute',
@@ -505,38 +493,52 @@ const styles = StyleSheet.create({
     top: 3,
     width: 14,
     height: 14,
-    borderRadius: 7,
-    backgroundColor: '#FEE2E2',
+    borderRadius: 3,
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
   },
   dropDotInner: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#DC2626',
+    width: 4,
+    height: 4,
+    borderRadius: 1,
+    backgroundColor: '#FFFFFF',
   },
   locationTextContainer: {
     flex: 1,
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 1,
+  },
   locationTypeLabel: {
-    fontSize: 8.5,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    letterSpacing: 0.6,
-    marginBottom: 0.5,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#000000',
+    letterSpacing: 0.8,
+  },
+  distanceBadge: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#666666',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   locationMainText: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#1F2937',
+    color: '#000000',
   },
   locationSubText: {
     fontSize: 10.5,
     fontWeight: '400',
-    color: '#6B7280',
+    color: '#666666',
     marginTop: 0.5,
   },
   actionRow: {
@@ -548,10 +550,10 @@ const styles = StyleSheet.create({
   cancelButton: {
     flex: 1,
     height: 44,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#F3F4F6',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -560,18 +562,18 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#DC2626',
+    color: '#000000',
   },
   acceptButton: {
     flex: 2,
     height: 44,
-    backgroundColor: '#10B981',
+    backgroundColor: '#000000',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#10B981',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 4,
   },

@@ -106,5 +106,19 @@
     "patch-package": "^8.0.0",
     "typescript": "~5.9.2"
   },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "@notifee/react-native"
+        ]
+      }
+    },
+    "install": {
+      "exclude": [
+        "expo-asset"
+      ]
+    }
+  },
   "private": true
 }

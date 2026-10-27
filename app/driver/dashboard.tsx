@@ -512,9 +512,7 @@ export default function DriverDashboardScreen() {
     };
   }, []);
 
-  const handleAcceptIncomingRequest = async () => {
-    if (!currentIncomingRequest) return;
-    const bookingId = currentIncomingRequest.id;
+  const acceptSpecificBooking = async (bookingId: string) => {
     try {
       const res = await acceptBooking(bookingId);
       if (res.success) {
@@ -530,11 +528,81 @@ export default function DriverDashboardScreen() {
     }
   };
 
+  const handleAcceptIncomingRequest = async () => {
+    if (!currentIncomingRequest) return;
+    await acceptSpecificBooking(currentIncomingRequest.id);
+  };
+
   const handleDeclineIncomingRequest = () => {
     if (!currentIncomingRequest) return;
     const currentId = currentIncomingRequest.id;
     setIncomingQueue((prev) => prev.filter((b) => b.id !== currentId));
+    if (Platform.OS === 'android' && OverlayPermission?.hideIncomingRequestOverlay) {
+      OverlayPermission.hideIncomingRequestOverlay().catch(() => {});
+    }
   };
+
+  // Global AppState management for Duty Floating Bubble & Native Overlay responses
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !OverlayPermission) return;
+
+    const checkPendingAcceptedBooking = async () => {
+      try {
+        if (OverlayPermission.getPendingAcceptedBookingId) {
+          const pendingId = await OverlayPermission.getPendingAcceptedBookingId();
+          if (pendingId) {
+            console.log('[OVERLAY] Detected pending accepted booking from native overlay:', pendingId);
+            await acceptSpecificBooking(pendingId);
+          }
+        }
+      } catch (err) {
+        console.error('[OVERLAY] Error checking pending accepted booking:', err);
+      }
+    };
+
+    // Check once on mount
+    checkPendingAcceptedBooking();
+
+    const subscription = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
+      console.log('[APP-STATE] Changed to:', nextState, '| isOnline:', user?.isOnline);
+
+      if (nextState === 'active') {
+        // App returned to foreground: hide floating bubble and overlay card
+        try {
+          if (OverlayPermission.hideFloatingBubble) {
+            await OverlayPermission.hideFloatingBubble();
+          }
+          if (OverlayPermission.hideIncomingRequestOverlay) {
+            await OverlayPermission.hideIncomingRequestOverlay();
+          }
+        } catch (e) {
+          console.warn('[OVERLAY] Error hiding bubble/overlay on active:', e);
+        }
+        await checkPendingAcceptedBooking();
+        fetchBookings();
+      } else if (nextState === 'background' || nextState === 'inactive') {
+        // App minimized: if driver is online, show the floating bubble
+        if (user?.isOnline) {
+          try {
+            const hasOverlay = OverlayPermission.canDrawOverlays ? await OverlayPermission.canDrawOverlays() : true;
+            if (hasOverlay && OverlayPermission.showFloatingBubble) {
+              await OverlayPermission.showFloatingBubble();
+              console.log('[OVERLAY] Floating bubble shown for online driver');
+            }
+          } catch (e) {
+            console.warn('[OVERLAY] Error showing floating bubble:', e);
+          }
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (OverlayPermission?.hideFloatingBubble) {
+        OverlayPermission.hideFloatingBubble().catch(() => {});
+      }
+    };
+  }, [user?.isOnline]);
 
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const bottomInset = insets.bottom + (Platform.OS === 'web' ? 34 : 20);
@@ -615,11 +683,24 @@ export default function DriverDashboardScreen() {
             if (prev.some((b) => b.id === data.booking.id)) return prev;
             return [...prev, data.booking];
           });
+
+          // If app is minimized or backgrounded when socket event arrives, trigger native system overlay!
+          if (Platform.OS === 'android' && OverlayPermission?.showIncomingRequestOverlay && AppState.currentState !== 'active') {
+            try {
+              OverlayPermission.showIncomingRequestOverlay(JSON.stringify(data.booking));
+              console.log('[SOCKET] Triggered native system overlay for booking:', data.booking.id);
+            } catch (err) {
+              console.warn('[DASHBOARD] Error showing overlay from socket:', err);
+            }
+          }
         });
 
         socket.on('booking:accepted', (data: { booking: any }) => {
           if (data?.booking?.id) {
             setIncomingQueue((prev) => prev.filter((b) => b.id !== data.booking.id));
+            if (Platform.OS === 'android' && OverlayPermission?.hideIncomingRequestOverlay) {
+              OverlayPermission.hideIncomingRequestOverlay().catch(() => {});
+            }
           }
         });
 
@@ -627,6 +708,9 @@ export default function DriverDashboardScreen() {
           const id = data?.bookingId || data?.booking?.id;
           if (id) {
             setIncomingQueue((prev) => prev.filter((b) => b.id !== id));
+            if (Platform.OS === 'android' && OverlayPermission?.hideIncomingRequestOverlay) {
+              OverlayPermission.hideIncomingRequestOverlay().catch(() => {});
+            }
           }
         });
 
@@ -754,6 +838,12 @@ export default function DriverDashboardScreen() {
 
       const data = await res.json();
       if (res.ok && data.user) {
+        if (!data.user.isOnline && Platform.OS === 'android' && OverlayPermission) {
+          try {
+            OverlayPermission.hideFloatingBubble?.();
+            OverlayPermission.hideIncomingRequestOverlay?.();
+          } catch (e) {}
+        }
         await refreshUser();
       } else {
         Alert.alert('System Error', data.error || 'Unable to update status. Please try again.');

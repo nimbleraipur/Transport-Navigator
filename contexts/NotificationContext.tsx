@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
@@ -51,7 +51,31 @@ if (TaskManager && Notifications) {
         console.log('[BACKGROUND-TASK] Received notification in background:', notification);
         const payload = notification?.request?.content?.data;
         if (payload?.type === 'new_booking' && payload?.bookingId) {
-          console.log('[BACKGROUND-TASK] Intercepted new_booking background push. Launching full screen intent.');
+          console.log('[BACKGROUND-TASK] Intercepted new_booking background push. Triggering native overlay card.');
+          
+          if (Platform.OS === 'android' && NativeModules?.OverlayPermission?.showIncomingRequestOverlay) {
+            try {
+              const bookingData = {
+                id: payload.bookingId,
+                customerName: payload.customerName || 'Customer',
+                price: payload.price || payload.fare || '0',
+                totalPrice: payload.fare || payload.price || '0',
+                vehicleType: payload.vehicleType || 'Truck',
+                pickup: {
+                  name: payload.pickupAddress || 'Pickup Location',
+                  address: payload.pickupAddress || 'Pickup Location',
+                },
+                delivery: {
+                  name: payload.dropAddress || 'Drop Location',
+                  address: payload.dropAddress || 'Drop Location',
+                },
+              };
+              NativeModules.OverlayPermission.showIncomingRequestOverlay(JSON.stringify(bookingData));
+              console.log('[BACKGROUND-TASK] Native system overlay triggered successfully.');
+            } catch (overlayErr) {
+              console.warn('[BACKGROUND-TASK] Error triggering overlay from push:', overlayErr);
+            }
+          }
           
           try {
             if (notifee) {
@@ -304,9 +328,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         await Notifications.setNotificationChannelAsync('new-booking-channel', {
           name: 'New Booking Requests',
           importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 500, 250, 500],
+          vibrationPattern: [0, 800, 400, 800, 400],
           lightColor: '#FF231F7C',
-          sound: 'default', // Fallback to system default sound for reliable background alerting
+          sound: 'new_booking.mp3',
+          enableVibrate: true,
+          showBadge: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          bypassDnd: true,
+          audioAttributes: {
+            usage: Notifications.AndroidAudioUsage.ALARM,
+            contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+          },
         });
 
         await Notifications.setNotificationCategoryAsync('new_booking_category', [

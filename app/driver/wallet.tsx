@@ -703,7 +703,8 @@ export default function WalletScreen() {
                     <View className="flex-1 bg-black/60 justify-end">
                         <KeyboardAvoidingView 
                             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                            className="bg-white rounded-t-[32px] px-6 pt-6 pb-10 border-t border-gray-100 shadow-2xl"
+                            className="bg-white rounded-t-[32px] px-6 pt-6 border-t border-gray-100 shadow-2xl"
+                            style={{ paddingBottom: Math.max(insets.bottom + 20, 36) }}
                         >
                             {/* Modal Header */}
                             <View className="flex-row items-center justify-between pb-4 border-b border-gray-100">

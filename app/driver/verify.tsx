@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     rejectionTitle: { fontSize: 14, fontWeight: '800', color: '#DC2626' },
     rejectionReason: { fontSize: 12, color: '#B91C1C', lineHeight: 18 },
     // Nav Buttons
-    navRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+    navRow: { flexDirection: 'row', gap: 12, marginTop: 12, marginBottom: 24 },
     backBtn: { flex: 1, height: 56, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#CBD5E1' },
     backBtnText: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
     continueBtn: { flex: 2, height: 56, borderRadius: 16, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },

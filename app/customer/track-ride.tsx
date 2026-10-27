@@ -293,7 +293,11 @@ export default function TrackRideScreen() {
         </LinearGradient>
 
         {/* Searching Content */}
-        <View className="flex-1 px-6 justify-center" style={{ paddingBottom: bottomInset + 20 }}>
+        <ScrollView
+          className="flex-1 px-6"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingTop: 16, paddingBottom: bottomInset + 30 }}
+          showsVerticalScrollIndicator={false}
+        >
           <SearchingAnimation timeLeft={timeLeft} />
 
           {/* Route Summary */}
@@ -350,7 +354,7 @@ export default function TrackRideScreen() {
               </View>
             )}
           </TouchableOpacity>
-        </View>
+        </ScrollView>
 
         {/* Cancel Modal */}
         <Modal visible={cancelModalVisible} transparent animationType="fade" onRequestClose={() => setCancelModalVisible(false)}>

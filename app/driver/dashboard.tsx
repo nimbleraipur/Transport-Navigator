@@ -347,22 +347,20 @@ export default function DriverDashboardScreen() {
     checkAppVersion();
   }, []);
 
-  // Permissions Modal state
+  // Permissions Modal state (Only 2 required: Notifications & Display Over Apps)
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [permissionStates, setPermissionStates] = useState({
     notifications: false,
     overlay: false,
-    battery: false,
   });
 
-  const checkAllPermissions = async (): Promise<{ notifications: boolean; overlay: boolean; battery: boolean }> => {
+  const checkAllPermissions = async (): Promise<{ notifications: boolean; overlay: boolean }> => {
     if (Platform.OS !== 'android') {
-      return { notifications: true, overlay: true, battery: true };
+      return { notifications: true, overlay: true };
     }
 
     let notificationsGranted = false;
     let overlayGranted = false;
-    let batteryGranted = false;
 
     try {
       const { status } = await Notifications.getPermissionsAsync();
@@ -382,21 +380,9 @@ export default function DriverDashboardScreen() {
       overlayGranted = true;
     }
 
-    try {
-      if (OverlayPermission && OverlayPermission.isBatteryOptimizationIgnored) {
-        batteryGranted = await OverlayPermission.isBatteryOptimizationIgnored();
-      } else {
-        batteryGranted = true;
-      }
-    } catch (e) {
-      console.error('[PERMISSIONS] Error checking battery:', e);
-      batteryGranted = true;
-    }
-
     const newStates = {
       notifications: notificationsGranted,
       overlay: overlayGranted,
-      battery: batteryGranted,
     };
     setPermissionStates(newStates);
     return newStates;
@@ -423,21 +409,6 @@ export default function DriverDashboardScreen() {
       console.error('[PERMISSIONS] Error requesting overlay:', e);
       await Linking.openSettings();
       setPermissionStates(prev => ({ ...prev, overlay: true }));
-    }
-  };
-
-  const requestBatteryPermission = async () => {
-    try {
-      if (OverlayPermission && OverlayPermission.requestIgnoreBatteryOptimizations) {
-        await OverlayPermission.requestIgnoreBatteryOptimizations();
-      } else {
-        await Linking.openSettings();
-      }
-      setPermissionStates(prev => ({ ...prev, battery: true }));
-    } catch (e) {
-      console.error('[PERMISSIONS] Error requesting battery optimizations:', e);
-      await Linking.openSettings();
-      setPermissionStates(prev => ({ ...prev, battery: true }));
     }
   };
 
@@ -833,7 +804,7 @@ export default function DriverDashboardScreen() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ pushToken })
+        body: JSON.stringify({ pushToken, isOnline: !user?.isOnline })
       });
 
       const data = await res.json();
@@ -858,29 +829,13 @@ export default function DriverDashboardScreen() {
 
   const handleModalGoOnline = async () => {
     setShowPermissionModal(false);
-
-    // Re-verify location and availability
-    setIsTogglingOnline(true);
-    try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
-
-      if (cityCheck.error) {
-        Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
-        setIsTogglingOnline(false);
-        return;
-      }
-    } catch (e) {
-      console.error('Location Check Error:', e);
-    }
-
     await proceedToggleOnline();
   };
 
   const handleToggleOnline = async () => {
     if (isTogglingOnline) return;
 
-    // If turning online, check location first
+    // If turning online, check location and required 2 permissions first
     if (!user?.isOnline) {
       setIsTogglingOnline(true);
       try {
@@ -891,24 +846,15 @@ export default function DriverDashboardScreen() {
           return;
         }
 
-        // Check if other Android permissions (Notifications, Overlay, Battery optimization) are missing
+        // Check if 2 required Android permissions (Notifications & Overlay) are granted
         const states = await checkAllPermissions();
-        if (!states.notifications || !states.overlay || !states.battery) {
+        if (!states.notifications || !states.overlay) {
           setShowPermissionModal(true);
           setIsTogglingOnline(false);
           return;
         }
-
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const cityCheck = await checkOperationalAvailability(loc.coords.latitude, loc.coords.longitude);
-
-        if (cityCheck.error) {
-          Alert.alert('Service Unavailable', 'We are not available in your current location yet. Stay tuned!');
-          setIsTogglingOnline(false);
-          return;
-        }
       } catch (e) {
-        console.error('Location Check Error:', e);
+        console.error('Online Permission Check Error:', e);
       }
     }
 
@@ -1104,7 +1050,7 @@ export default function DriverDashboardScreen() {
               </View>
               <Text className="text-xl font-inter-bold text-text text-center">Permissions Required</Text>
               <Text className="text-xs font-inter-medium text-text-tertiary text-center mt-1 px-4">
-                Rides and requests receive karne ke liye niche di gayi permissions ko step-by-step enable karein:
+                Rides receive karne ke liye niche di gayi 2 permissions ko enable karein:
               </Text>
             </View>
 
@@ -1166,37 +1112,8 @@ export default function DriverDashboardScreen() {
               )}
             </View>
 
-            {/* Step 3: Battery Saver optimization */}
-            <View className="flex-row items-center justify-between bg-gray-50/60 p-4 rounded-2xl border border-gray-100 mb-6">
-              <View className="flex-row items-center flex-1 mr-4">
-                <View className={`w-10 h-10 rounded-xl items-center justify-center mr-3 ${permissionStates.battery ? 'bg-success/10' : 'bg-primary/10'}`}>
-                  <Ionicons name="battery-charging" size={20} color={permissionStates.battery ? '#10B981' : Colors.primary} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-sm font-inter-bold text-text">Disable Battery Saver</Text>
-                  <Text className="text-[11px] font-inter-medium text-text-tertiary mt-0.5">
-                    Background connectivity bani rahe aur duty off na ho.
-                  </Text>
-                </View>
-              </View>
-              {permissionStates.battery ? (
-                <View className="flex-row items-center bg-success/15 px-3 py-1.5 rounded-xl border border-success/10">
-                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                  <Text className="text-[10px] font-inter-bold text-success ml-1 uppercase">Allowed</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={requestBatteryPermission}
-                  className="bg-primary px-4 py-2 rounded-xl"
-                  activeOpacity={0.8}
-                >
-                  <Text className="text-xs font-inter-bold text-surface">Enable</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
             {/* Bottom Actions */}
-            <View className="flex-row items-center mt-2">
+            <View className="flex-row items-center mt-4">
               <TouchableOpacity
                 onPress={() => setShowPermissionModal(false)}
                 className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center justify-center mr-3"
@@ -1206,9 +1123,15 @@ export default function DriverDashboardScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={handleModalGoOnline}
-                disabled={!(permissionStates.notifications && permissionStates.overlay && permissionStates.battery)}
-                style={{ opacity: (permissionStates.notifications && permissionStates.overlay && permissionStates.battery) ? 1 : 0.5 }}
+                onPress={async () => {
+                  if (!permissionStates.notifications) {
+                    await requestNotificationPermission();
+                  }
+                  if (!permissionStates.overlay) {
+                    await requestOverlayPermission();
+                  }
+                  await handleModalGoOnline();
+                }}
                 className="flex-1 bg-accent py-3.5 rounded-2xl items-center justify-center"
                 activeOpacity={0.8}
               >

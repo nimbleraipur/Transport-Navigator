@@ -4,11 +4,13 @@ node_modules/
 
 # Android build outputs and caches (CRITICAL: prevents uploading Windows absolute paths to Linux EAS)
 android/.gradle/
+android/.kotlin/
 android/build/
 android/app/build/
 android/.cxx/
 android/app/.cxx/
 **/.gradle/
+**/.kotlin/
 **/build/
 **/.cxx/
 

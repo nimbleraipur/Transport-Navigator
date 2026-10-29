@@ -292,10 +292,17 @@ function compareVersions(v1: string, v2: string): number {
   return 0;
 }
 
+const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+  ]);
+};
+
 export default function DriverDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, token, refreshUser } = useAuth();
+  const { user, token, refreshUser, updateUser } = useAuth();
   const { bookings, fetchBookings, getActiveBooking, checkOperationalAvailability, acceptBooking } = useBookings();
   const { unreadCount } = useNotifications();
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
@@ -363,15 +370,24 @@ export default function DriverDashboardScreen() {
     let overlayGranted = false;
 
     try {
-      const { status } = await Notifications.getPermissionsAsync();
-      notificationsGranted = (status === 'granted');
+      if (Notifications?.getPermissionsAsync) {
+        const perm = await withTimeout(
+          Notifications.getPermissionsAsync(),
+          1200,
+          { status: 'granted' } as any
+        );
+        notificationsGranted = (perm?.status === 'granted');
+      } else {
+        notificationsGranted = true;
+      }
     } catch (e) {
       console.error('[PERMISSIONS] Error checking notification:', e);
+      notificationsGranted = true;
     }
 
     try {
       if (OverlayPermission && OverlayPermission.canDrawOverlays) {
-        overlayGranted = await OverlayPermission.canDrawOverlays();
+        overlayGranted = await withTimeout(OverlayPermission.canDrawOverlays(), 1200, true);
       } else {
         overlayGranted = true;
       }
@@ -769,43 +785,50 @@ export default function DriverDashboardScreen() {
   const proceedToggleOnline = async () => {
     setIsTogglingOnline(true);
     try {
-      let pushToken: string | undefined = undefined;
-      try {
-        if (Platform.OS !== 'web' && Notifications) {
-          let { status } = await Notifications.getPermissionsAsync();
-          if (status !== 'granted') {
-            const req = await Notifications.requestPermissionsAsync();
-            status = req.status;
-          }
-          if (status === 'granted') {
-            const tokenRes = await Notifications.getExpoPushTokenAsync({
-              projectId: "b59bcbe1-1876-4a8a-a87e-6684317f62b4"
-            });
-            pushToken = tokenRes.data;
-          }
-        }
-        if (!pushToken) {
-          const cached = await AsyncStorage.getItem('expo_push_token');
-          if (cached) pushToken = cached;
-        }
-      } catch (err) {
-        console.warn('Failed to fetch pushToken on toggleOnline:', err);
+      // 1. Resolve push token FAST without stalling
+      let pushToken: string | undefined = user?.pushToken;
+      if (!pushToken) {
         try {
           const cached = await AsyncStorage.getItem('expo_push_token');
           if (cached) pushToken = cached;
-        } catch (e) { }
+        } catch (e) {}
       }
 
+      // If still missing, race push token lookup with 1500ms safety timeout
+      if (!pushToken && Platform.OS !== 'web' && Notifications?.getExpoPushTokenAsync) {
+        try {
+          const tokenRes = await withTimeout(
+            Notifications.getExpoPushTokenAsync({
+              projectId: "b59bcbe1-1876-4a8a-a87e-6684317f62b4"
+            }),
+            1500,
+            null
+          );
+          if (tokenRes?.data) {
+            pushToken = tokenRes.data;
+            AsyncStorage.setItem('expo_push_token', pushToken).catch(() => {});
+          }
+        } catch (err) {
+          console.warn('Fast pushToken fetch skipped:', err);
+        }
+      }
+
+      // 2. Network call to toggle online with 8000ms AbortController timeout
       const baseUrl = getApiUrl();
       const url = new URL('/api/users/toggle-online', baseUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch(url.toString(), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ pushToken, isOnline: !user?.isOnline })
+        body: JSON.stringify({ pushToken, isOnline: !user?.isOnline }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       const data = await res.json();
       if (res.ok && data.user) {
@@ -815,13 +838,20 @@ export default function DriverDashboardScreen() {
             OverlayPermission.hideIncomingRequestOverlay?.();
           } catch (e) {}
         }
-        await refreshUser();
+        // Immediately update React user state so UI switch turns green instantly
+        updateUser(data.user);
+        // Background refresh without blocking
+        refreshUser().catch(() => {});
       } else {
-        Alert.alert('System Error', data.error || 'Unable to update status. Please try again.');
+        Alert.alert('Notice', data.error || 'Unable to update status. Please try again.');
       }
     } catch (e: any) {
       console.error('Toggle Online Error:', e);
-      Alert.alert('Connection Problem', 'Check your internet connection and try again.');
+      if (e.name === 'AbortError') {
+        Alert.alert('Timeout', 'Server response timed out. Please check your network and try again.');
+      } else {
+        Alert.alert('Connection Problem', 'Check your internet connection and try again.');
+      }
     } finally {
       setIsTogglingOnline(false);
     }
@@ -839,8 +869,29 @@ export default function DriverDashboardScreen() {
     if (!user?.isOnline) {
       setIsTogglingOnline(true);
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
+        let locGranted = false;
+        try {
+          const perm = await withTimeout(
+            Location.getForegroundPermissionsAsync(),
+            1500,
+            { status: 'denied' } as any
+          );
+          if (perm.status === 'granted') {
+            locGranted = true;
+          } else {
+            const req = await withTimeout(
+              Location.requestForegroundPermissionsAsync(),
+              3000,
+              { status: 'denied' } as any
+            );
+            locGranted = (req.status === 'granted');
+          }
+        } catch (e) {
+          console.warn('[LOCATION-CHECK-ERROR]', e);
+          locGranted = true; // Don't block if location check errors
+        }
+
+        if (!locGranted) {
           Alert.alert('Permission Denied', 'Please allow location access to go online.');
           setIsTogglingOnline(false);
           return;

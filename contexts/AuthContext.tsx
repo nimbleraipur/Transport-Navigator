@@ -18,6 +18,7 @@ export interface UserData {
   totalTrips?: number;
   totalEarnings?: number;
   location?: { lat: number; lng: number };
+  pushToken?: string;
   verificationStatus?: 'none' | 'pending' | 'approved' | 'rejected';
   aadharNumber?: string;
   aadharPhoto?: string;

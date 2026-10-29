@@ -222,7 +222,7 @@ class FloatingBubbleService : Service() {
         try {
             val dpToPx = resources.displayMetrics.density
             val screenWidth = resources.displayMetrics.widthPixels
-            val cardWidth = (screenWidth * 0.94).toInt().coerceAtMost((480 * dpToPx).toInt())
+            val cardWidth = (screenWidth - (24 * dpToPx).toInt()).coerceAtMost((480 * dpToPx).toInt())
 
             val cardParams = WindowManager.LayoutParams(
                 cardWidth,
@@ -233,7 +233,7 @@ class FloatingBubbleService : Service() {
             ).apply {
                 gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
                 x = 0
-                y = (32 * dpToPx).toInt()
+                y = (36 * dpToPx).toInt()
             }
 
             var customerName = "Customer"
@@ -242,7 +242,7 @@ class FloatingBubbleService : Service() {
             var pickupArea = ""
             var dropName = "Drop Location"
             var dropArea = ""
-            var vehicleType = "Truck"
+            var vehicleType = "Vehicle"
             var bookingId = ""
             var distance = "0"
 
@@ -252,7 +252,7 @@ class FloatingBubbleService : Service() {
                     bookingId = obj.optString("id", obj.optString("bookingId", ""))
                     customerName = obj.optString("customerName", "Customer")
                     fare = obj.optString("totalPrice", obj.optString("price", obj.optString("fare", "0")))
-                    vehicleType = obj.optString("vehicleType", "Truck")
+                    vehicleType = obj.optString("vehicleType", "Vehicle")
                     distance = obj.optString("distance", "0")
 
                     val pickup = obj.optJSONObject("pickup")
@@ -275,7 +275,7 @@ class FloatingBubbleService : Service() {
                 }
             }
 
-            // Outer Card Container (White with rounded corners 20dp & border #E5E7EB)
+            // Outer Card Container (White with rounded corners 20dp & border #E5E7EB, elevation 16)
             val cardLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 val bg = GradientDrawable().apply {
@@ -285,13 +285,13 @@ class FloatingBubbleService : Service() {
                     setStroke((1.5 * dpToPx).toInt(), Color.parseColor("#E5E7EB"))
                 }
                 background = bg
-                elevation = 20f
+                elevation = 16f
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     clipToOutline = true
                 }
             }
 
-            // 1. Top Progress Track & Bar (height 4dp)
+            // 1. Top Progress Track & Bar (height 4dp, #F3F4F6 track, solid black bar)
             val progressTrack = FrameLayout(this).apply {
                 val trackBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
@@ -314,7 +314,7 @@ class FloatingBubbleService : Service() {
             progressTrack.addView(progressBar)
             cardLayout.addView(progressTrack)
 
-            // Content Container with padding 16dp horizontal, 10dp top, 12dp bottom
+            // Content Container with exact padding: 16dp horizontal, 10dp top, 12dp bottom
             val contentLayout = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 val padH = (16 * dpToPx).toInt()
@@ -323,17 +323,20 @@ class FloatingBubbleService : Service() {
                 setPadding(padH, padT, padH, padB)
             }
 
-            // 2. Header Row: Price + Vehicle Chip on Left, Timer Badge on Right
+            // 2. TOP HEADER ROW: Price + Vehicle Chip on Left, Timer Badge on Right
             val topRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
+                val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
-                )
+                ).apply {
+                    bottomMargin = (4 * dpToPx).toInt()
+                }
+                layoutParams = lp
             }
 
-            // Left Price + Vehicle Chip
+            // Price & Vehicle Chip
             val priceGroup = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -379,45 +382,91 @@ class FloatingBubbleService : Service() {
             }
             topRow.addView(spacer)
 
-            // Timer Badge (Black with white text ⏱ 30s)
-            val timerBadge = TextView(this).apply {
-                text = "⏱ 30s"
-                textSize = 11f
-                setTextColor(Color.WHITE)
-                paint.isFakeBoldText = true
+            // Timer Badge: Solid Black with clock icon and white text (e.g. ⏱ 30s)
+            val timerBadgeContainer = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 val badgeBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 12 * dpToPx
                     setColor(Color.BLACK)
                 }
                 background = badgeBg
-                val padX = (9 * dpToPx).toInt()
-                val padY = (4 * dpToPx).toInt()
+                val padX = (8 * dpToPx).toInt()
+                val padY = (3.5 * dpToPx).toInt()
                 setPadding(padX, padY, padX, padY)
             }
-            topRow.addView(timerBadge)
+
+            val timerIconRes = resources.getIdentifier("ic_time_white", "drawable", packageName)
+            if (timerIconRes != 0) {
+                val clockIcon = ImageView(this).apply {
+                    setImageResource(timerIconRes)
+                    val iconSize = (13 * dpToPx).toInt()
+                    val lp = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                        marginEnd = (4 * dpToPx).toInt()
+                    }
+                    layoutParams = lp
+                }
+                timerBadgeContainer.addView(clockIcon)
+            }
+
+            val timerText = TextView(this).apply {
+                text = "30s"
+                textSize = 11f
+                setTextColor(Color.WHITE)
+                paint.isFakeBoldText = true
+            }
+            timerBadgeContainer.addView(timerText)
+            topRow.addView(timerBadgeContainer)
+
             contentLayout.addView(topRow)
 
-            // Divider Line
+            // Divider Line (#F3F4F6, 1dp, 6dp margin)
             val divider = View(this).apply {
                 setBackgroundColor(Color.parseColor("#F3F4F6"))
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     (1 * dpToPx).toInt()
                 ).apply {
-                    topMargin = (7 * dpToPx).toInt()
-                    bottomMargin = (7 * dpToPx).toInt()
+                    topMargin = (6 * dpToPx).toInt()
+                    bottomMargin = (6 * dpToPx).toInt()
                 }
                 layoutParams = lp
             }
             contentLayout.addView(divider)
 
-            // 3. Middle Route Timeline
-            val routeSection = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
+            // 3. MIDDLE ROUTE TIMELINE: Matching IncomingRequestModal Black & White design
+            val routeContainer = FrameLayout(this).apply {
+                val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (3 * dpToPx).toInt()
+                    bottomMargin = (3 * dpToPx).toInt()
+                }
+                layoutParams = lp
+            }
+
+            // Connecting timeline vertical line (1.5dp, #E5E7EB, centered at 8dp from left)
+            val routeLine = View(this).apply {
+                setBackgroundColor(Color.parseColor("#E5E7EB"))
+                val lp = FrameLayout.LayoutParams(
+                    (1.5 * dpToPx).toInt().coerceAtLeast(1),
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                ).apply {
+                    marginStart = (8 * dpToPx).toInt()
+                    topMargin = (12 * dpToPx).toInt()
+                    bottomMargin = (14 * dpToPx).toInt()
+                }
+                layoutParams = lp
+            }
+            routeContainer.addView(routeLine)
+
+            val routeColumn = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
                 )
             }
 
@@ -425,39 +474,48 @@ class FloatingBubbleService : Service() {
             val pickupRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.TOP
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (2 * dpToPx).toInt()
+                    bottomMargin = (4 * dpToPx).toInt()
+                }
+                layoutParams = lp
             }
 
-            // Pickup Indicator: Outer Circle 16dp with Green Inner Dot
-            val pickupDotContainer = FrameLayout(this).apply {
-                val outerBg = GradientDrawable().apply {
+            // Pickup Dot: Outer 14dp circle (White with 2dp black border) + Inner 4dp black dot
+            val pickupDotOuter = FrameLayout(this).apply {
+                val bg = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#ECFDF5"))
-                    setStroke((1.5 * dpToPx).toInt(), Color.parseColor("#10B981"))
+                    setColor(Color.WHITE)
+                    setStroke((2 * dpToPx).toInt(), Color.BLACK)
                 }
-                background = outerBg
-                val size = (16 * dpToPx).toInt()
+                background = bg
+                val size = (14 * dpToPx).toInt()
                 val lp = LinearLayout.LayoutParams(size, size).apply {
-                    topMargin = (2 * dpToPx).toInt()
+                    marginStart = (2 * dpToPx).toInt()
                     marginEnd = (10 * dpToPx).toInt()
+                    topMargin = (3 * dpToPx).toInt()
                 }
                 layoutParams = lp
             }
             val pickupDotInner = View(this).apply {
-                val innerBg = GradientDrawable().apply {
+                val bg = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#10B981"))
+                    setColor(Color.BLACK)
                 }
-                background = innerBg
-                val dotSize = (6 * dpToPx).toInt()
+                background = bg
+                val dotSize = (4 * dpToPx).toInt()
                 val lp = FrameLayout.LayoutParams(dotSize, dotSize).apply {
                     gravity = Gravity.CENTER
                 }
                 layoutParams = lp
             }
-            pickupDotContainer.addView(pickupDotInner)
-            pickupRow.addView(pickupDotContainer)
+            pickupDotOuter.addView(pickupDotInner)
+            pickupRow.addView(pickupDotOuter)
 
-            // Pickup Text Details
+            // Pickup Details
             val pickupDetails = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -469,14 +527,18 @@ class FloatingBubbleService : Service() {
             }
             val pickupLabel = TextView(this).apply {
                 text = "PICKUP"
-                textSize = 10f
-                setTextColor(Color.parseColor("#64748B"))
+                textSize = 9f
+                setTextColor(Color.BLACK)
                 paint.isFakeBoldText = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    letterSpacing = 0.08f
+                }
             }
             pickupLabelRow.addView(pickupLabel)
 
-            val pickupDistBadge = TextView(this).apply {
-                text = "Nearby"
+            val pickupBadge = TextView(this).apply {
+                val distNum = distance.toDoubleOrNull() ?: 0.0
+                text = if (distNum > 0) String.format("%.1f km trip", distNum) else "Nearby"
                 textSize = 9.5f
                 setTextColor(Color.parseColor("#666666"))
                 paint.isFakeBoldText = true
@@ -498,7 +560,7 @@ class FloatingBubbleService : Service() {
                 }
                 layoutParams = lp
             }
-            pickupLabelRow.addView(pickupDistBadge)
+            pickupLabelRow.addView(pickupBadge)
             pickupDetails.addView(pickupLabelRow)
 
             val pickupMainText = TextView(this).apply {
@@ -528,59 +590,55 @@ class FloatingBubbleService : Service() {
                 }
                 pickupDetails.addView(pickupAreaText)
             }
-
             pickupRow.addView(pickupDetails)
-            routeSection.addView(pickupRow)
-
-            // Timeline Vertical Line (2dp width, placed under the 16dp indicator circle)
-            val timelineLine = View(this).apply {
-                setBackgroundColor(Color.parseColor("#E2E8F0"))
-                val lp = LinearLayout.LayoutParams((2 * dpToPx).toInt(), (14 * dpToPx).toInt()).apply {
-                    marginStart = (7 * dpToPx).toInt()
-                    topMargin = (2 * dpToPx).toInt()
-                    bottomMargin = (2 * dpToPx).toInt()
-                }
-                layoutParams = lp
-            }
-            routeSection.addView(timelineLine)
+            routeColumn.addView(pickupRow)
 
             // DROP ROW
             val dropRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.TOP
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (4 * dpToPx).toInt()
+                    bottomMargin = (2 * dpToPx).toInt()
+                }
+                layoutParams = lp
             }
 
-            // Drop Indicator: Outer Circle 16dp with Red Inner Dot
-            val dropDotContainer = FrameLayout(this).apply {
-                val outerBg = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#FEF2F2"))
-                    setStroke((1.5 * dpToPx).toInt(), Color.parseColor("#EF4444"))
+            // Drop Dot: Outer 14dp rounded square cornerRadius 3dp (solid black) + Inner 4dp white dot
+            val dropDotOuter = FrameLayout(this).apply {
+                val bg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 3 * dpToPx
+                    setColor(Color.BLACK)
                 }
-                background = outerBg
-                val size = (16 * dpToPx).toInt()
+                background = bg
+                val size = (14 * dpToPx).toInt()
                 val lp = LinearLayout.LayoutParams(size, size).apply {
-                    topMargin = (2 * dpToPx).toInt()
+                    marginStart = (2 * dpToPx).toInt()
                     marginEnd = (10 * dpToPx).toInt()
+                    topMargin = (3 * dpToPx).toInt()
                 }
                 layoutParams = lp
             }
             val dropDotInner = View(this).apply {
-                val innerBg = GradientDrawable().apply {
+                val bg = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#EF4444"))
+                    setColor(Color.WHITE)
                 }
-                background = innerBg
-                val dotSize = (6 * dpToPx).toInt()
+                background = bg
+                val dotSize = (4 * dpToPx).toInt()
                 val lp = FrameLayout.LayoutParams(dotSize, dotSize).apply {
                     gravity = Gravity.CENTER
                 }
                 layoutParams = lp
             }
-            dropDotContainer.addView(dropDotInner)
-            dropRow.addView(dropDotContainer)
+            dropDotOuter.addView(dropDotInner)
+            dropRow.addView(dropDotOuter)
 
-            // Drop Text Details
+            // Drop Details
             val dropDetails = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -592,13 +650,16 @@ class FloatingBubbleService : Service() {
             }
             val dropLabel = TextView(this).apply {
                 text = "DROP"
-                textSize = 10f
-                setTextColor(Color.parseColor("#64748B"))
+                textSize = 9f
+                setTextColor(Color.BLACK)
                 paint.isFakeBoldText = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    letterSpacing = 0.08f
+                }
             }
             dropLabelRow.addView(dropLabel)
 
-            val dropDistBadge = TextView(this).apply {
+            val dropBadge = TextView(this).apply {
                 val distNum = distance.toDoubleOrNull() ?: 0.0
                 text = if (distNum > 0) String.format("%.1f km trip", distNum) else "Direct Trip"
                 textSize = 9.5f
@@ -622,7 +683,7 @@ class FloatingBubbleService : Service() {
                 }
                 layoutParams = lp
             }
-            dropLabelRow.addView(dropDistBadge)
+            dropLabelRow.addView(dropBadge)
             dropDetails.addView(dropLabelRow)
 
             val dropMainText = TextView(this).apply {
@@ -652,29 +713,28 @@ class FloatingBubbleService : Service() {
                 }
                 dropDetails.addView(dropAreaText)
             }
-
             dropRow.addView(dropDetails)
-            routeSection.addView(dropRow)
-            contentLayout.addView(routeSection)
+            routeColumn.addView(dropRow)
 
-            // 4. Action Buttons Row: Cancel (flex 1) + Accept (flex 2)
+            routeContainer.addView(routeColumn)
+            contentLayout.addView(routeContainer)
+
+            // 4. ACTION BUTTONS ROW: Cancel (flex 1) + Accept Ride (flex 2)
             val actionRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                    (44 * dpToPx).toInt()
                 ).apply {
                     topMargin = (10 * dpToPx).toInt()
                 }
                 layoutParams = lp
             }
 
-            val cancelBtn = TextView(this).apply {
-                text = "✕ Cancel"
-                textSize = 13f
+            // Cancel Button: flex 1, rounded 12dp, #F3F4F6 with #E5E7EB border
+            val cancelBtn = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                setTextColor(Color.BLACK)
-                paint.isFakeBoldText = true
                 val cancelBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 12 * dpToPx
@@ -682,38 +742,83 @@ class FloatingBubbleService : Service() {
                     setStroke((1 * dpToPx).toInt(), Color.parseColor("#E5E7EB"))
                 }
                 background = cancelBg
-                val lp = LinearLayout.LayoutParams(0, (44 * dpToPx).toInt(), 1f).apply {
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
                     marginEnd = (10 * dpToPx).toInt()
                 }
                 layoutParams = lp
+                isClickable = true
+                isFocusable = true
                 setOnClickListener {
                     hideOverlayCard()
                 }
             }
+
+            val cancelIconRes = resources.getIdentifier("ic_close_black", "drawable", packageName)
+            if (cancelIconRes != 0) {
+                val cancelIcon = ImageView(this).apply {
+                    setImageResource(cancelIconRes)
+                    val iconSize = (16 * dpToPx).toInt()
+                    val lp = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                        marginEnd = (5 * dpToPx).toInt()
+                    }
+                    layoutParams = lp
+                }
+                cancelBtn.addView(cancelIcon)
+            }
+
+            val cancelText = TextView(this).apply {
+                text = "Cancel"
+                textSize = 13f
+                setTextColor(Color.BLACK)
+                paint.isFakeBoldText = true
+            }
+            cancelBtn.addView(cancelText)
             actionRow.addView(cancelBtn)
 
-            val acceptBtn = TextView(this).apply {
-                text = "✇ Accept Ride"
-                textSize = 14f
+            // Accept Button: flex 2, rounded 12dp, solid black #000000, elevation 4
+            val acceptBtn = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                paint.isFakeBoldText = true
                 val acceptBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 12 * dpToPx
                     setColor(Color.BLACK)
                 }
                 background = acceptBg
-                val lp = LinearLayout.LayoutParams(0, (44 * dpToPx).toInt(), 2f)
+                elevation = 4 * dpToPx
+                val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 2f)
                 layoutParams = lp
+                isClickable = true
+                isFocusable = true
                 setOnClickListener {
                     hideOverlayCard()
                     bringAppToForeground(bookingId)
                 }
             }
-            actionRow.addView(acceptBtn)
-            contentLayout.addView(actionRow)
 
+            val steeringIconRes = resources.getIdentifier("ic_steering_wheel", "drawable", packageName)
+            if (steeringIconRes != 0) {
+                val acceptIcon = ImageView(this).apply {
+                    setImageResource(steeringIconRes)
+                    val iconSize = (18 * dpToPx).toInt()
+                    val lp = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                        marginEnd = (6 * dpToPx).toInt()
+                    }
+                    layoutParams = lp
+                }
+                acceptBtn.addView(acceptIcon)
+            }
+
+            val acceptText = TextView(this).apply {
+                text = "Accept Ride"
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                paint.isFakeBoldText = true
+            }
+            acceptBtn.addView(acceptText)
+            actionRow.addView(acceptBtn)
+
+            contentLayout.addView(actionRow)
             cardLayout.addView(contentLayout)
             overlayCardView = cardLayout
 
@@ -724,7 +829,7 @@ class FloatingBubbleService : Service() {
             overlayTimer = object : CountDownTimer(30000, 1000) {
                 override fun onTick(millisUntilFinished: Long) {
                     val sec = (millisUntilFinished / 1000).toInt()
-                    timerBadge.text = "⏱ ${sec}s"
+                    timerText.text = "${sec}s"
                 }
 
                 override fun onFinish() {
@@ -747,14 +852,45 @@ class FloatingBubbleService : Service() {
             }
 
             try {
-                // Play loud custom siren from res/raw/new_booking on continuous loop
+                // Play identical new_booking sound file from res/raw on continuous loop
                 val resId = resources.getIdentifier("new_booking", "raw", packageName)
                 if (resId != 0) {
                     mediaPlayer?.release()
-                    mediaPlayer = MediaPlayer.create(applicationContext, resId)?.apply {
-                        isLooping = true
-                        setVolume(1.0f, 1.0f)
-                        start()
+                    try {
+                        val afd = resources.openRawResourceFd(resId)
+                        if (afd != null) {
+                            mediaPlayer = MediaPlayer().apply {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                    setAudioAttributes(
+                                        android.media.AudioAttributes.Builder()
+                                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                            .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                                            .build()
+                                    )
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    setAudioStreamType(android.media.AudioManager.STREAM_ALARM)
+                                }
+                                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                                afd.close()
+                                prepare()
+                                isLooping = true
+                                setVolume(1.0f, 1.0f)
+                                start()
+                            }
+                        } else {
+                            mediaPlayer = MediaPlayer.create(applicationContext, resId)?.apply {
+                                isLooping = true
+                                setVolume(1.0f, 1.0f)
+                                start()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        mediaPlayer = MediaPlayer.create(applicationContext, resId)?.apply {
+                            isLooping = true
+                            setVolume(1.0f, 1.0f)
+                            start()
+                        }
                     }
                 } else {
                     val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)

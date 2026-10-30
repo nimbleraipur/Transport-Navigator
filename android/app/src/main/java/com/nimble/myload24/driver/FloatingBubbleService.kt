@@ -291,11 +291,11 @@ class FloatingBubbleService : Service() {
                 }
             }
 
-            // 1. Top Progress Track & Bar (height 4dp, #F3F4F6 track, emerald green animated bar #10B981)
+            // 1. Top Progress Track & Bar (height 4dp, #E5E7EB track, sleek premium black animated bar #000000 to #1F2937)
             val progressTrack = FrameLayout(this).apply {
                 val trackBg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    setColor(Color.parseColor("#F3F4F6"))
+                    setColor(Color.parseColor("#E5E7EB"))
                 }
                 background = trackBg
                 layoutParams = LinearLayout.LayoutParams(
@@ -307,7 +307,7 @@ class FloatingBubbleService : Service() {
             val progressBar = View(this).apply {
                 val barBg = GradientDrawable(
                     GradientDrawable.Orientation.LEFT_RIGHT,
-                    intArrayOf(Color.parseColor("#10B981"), Color.parseColor("#059669"))
+                    intArrayOf(Color.parseColor("#000000"), Color.parseColor("#1F2937"))
                 )
                 background = barBg
                 layoutParams = FrameLayout.LayoutParams(

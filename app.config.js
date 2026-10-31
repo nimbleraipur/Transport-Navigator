@@ -42,7 +42,7 @@ module.exports = ({ config }) => ({
   android: {
     package: IS_DRIVER ? 'com.nimble.myload24.driver' : 'com.nimble.myload24',
     googleServicesFile: IS_DRIVER ? './google-services-driver.json' : './google-services-customer.json',
-    versionCode: IS_DRIVER ? 18 : 16,
+    versionCode: IS_DRIVER ? 19 : 16,
     permissions: [
       "CAMERA",
       "READ_EXTERNAL_STORAGE",

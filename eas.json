@@ -38,6 +38,7 @@
             }
         },
         "customer": {
+            "credentialsSource": "local",
             "android": {
                 "buildType": "app-bundle"
             },
@@ -107,7 +108,9 @@
         }
     },
     "submit": {
-        "production": {}
+        "production": {},
+        "customer": {},
+        "driver": {}
     }
 }
 

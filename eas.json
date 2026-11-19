@@ -109,7 +109,11 @@
     },
     "submit": {
         "production": {},
-        "customer": {},
+        "customer": {
+            "ios": {
+                "ascAppId": "6834291520"
+            }
+        },
         "driver": {}
     }
 }

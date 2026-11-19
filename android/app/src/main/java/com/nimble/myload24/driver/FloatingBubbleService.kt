@@ -251,7 +251,24 @@ class FloatingBubbleService : Service() {
                     val obj = JSONObject(bookingJsonStr)
                     bookingId = obj.optString("id", obj.optString("bookingId", ""))
                     customerName = obj.optString("customerName", "Customer")
-                    fare = obj.optString("totalPrice", obj.optString("price", obj.optString("fare", "0")))
+                    val rawFare = obj.optString("totalPrice", obj.optString("price", obj.optString("fare", "0")))
+                        .replace("₹", "")
+                        .replace(",", "")
+                        .trim()
+                    fare = try {
+                        val num = rawFare.toDoubleOrNull()
+                        if (num != null) {
+                            if (num % 1.0 == 0.0) {
+                                num.toLong().toString()
+                            } else {
+                                String.format("%.0f", num)
+                            }
+                        } else {
+                            rawFare.ifEmpty { "0" }
+                        }
+                    } catch (e: Exception) {
+                        rawFare.ifEmpty { "0" }
+                    }
                     vehicleType = obj.optString("vehicleType", "Vehicle")
                     distance = obj.optString("distance", "0")
 
@@ -342,7 +359,7 @@ class FloatingBubbleService : Service() {
                 layoutParams = lp
             }
 
-            // Customer & Vehicle Pill Container (like requests.tsx bg-primary/10 rounded-lg)
+            // Customer & Vehicle Pill Container (flexible width with weight so price column is never pushed or clipped)
             val customerPill = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -356,6 +373,14 @@ class FloatingBubbleService : Service() {
                 val padX = (8 * dpToPx).toInt()
                 val padY = (5 * dpToPx).toInt()
                 setPadding(padX, padY, padX, padY)
+                val lp = LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                ).apply {
+                    marginEnd = (10 * dpToPx).toInt()
+                }
+                layoutParams = lp
             }
 
             // Customer Avatar Circle
@@ -391,6 +416,11 @@ class FloatingBubbleService : Service() {
             // Customer Name & Vehicle Column
             val customerTextCol = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
             }
             val customerNameTv = TextView(this).apply {
                 text = customerName.uppercase()
@@ -410,6 +440,8 @@ class FloatingBubbleService : Service() {
                 textSize = 9f
                 setTextColor(Color.parseColor("#059669"))
                 paint.isFakeBoldText = true
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -423,23 +455,31 @@ class FloatingBubbleService : Service() {
 
             topRow.addView(customerPill)
 
-            // Spacer
-            val topSpacer = View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
-            }
-            topRow.addView(topSpacer)
-
-            // Right Column: Price + Timer Badge
+            // Right Column: Price + Timer Badge (fixed width / WRAP_CONTENT with Gravity.END so price is always fully visible)
             val rightCol = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.END
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                layoutParams = lp
             }
 
             val priceValue = TextView(this).apply {
                 text = "₹$fare"
-                textSize = 22f
+                textSize = 20f
                 setTextColor(Color.parseColor("#111827"))
                 paint.isFakeBoldText = true
+                maxLines = 1
+                gravity = Gravity.END
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = Gravity.END
+                }
+                layoutParams = lp
             }
             rightCol.addView(priceValue)
 
@@ -461,6 +501,7 @@ class FloatingBubbleService : Service() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     topMargin = (2 * dpToPx).toInt()
+                    gravity = Gravity.END
                 }
                 layoutParams = lp
             }
@@ -924,15 +965,14 @@ class FloatingBubbleService : Service() {
             cancelBtn.addView(cancelText)
             actionRow.addView(cancelBtn)
 
-            // Accept Button: flex 2, rounded 12dp, Vibrant Emerald Green Gradient [ #10B981 to #059669 ], elevation 6dp
+            // Accept Button: flex 2, rounded 12dp, Pitch Black (#000000), elevation 6dp
             val acceptBtn = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
-                val acceptBg = GradientDrawable(
-                    GradientDrawable.Orientation.LEFT_RIGHT,
-                    intArrayOf(Color.parseColor("#10B981"), Color.parseColor("#059669"))
-                ).apply {
+                val acceptBg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
                     cornerRadius = 12 * dpToPx
+                    setColor(Color.parseColor("#000000"))
                 }
                 background = acceptBg
                 elevation = 6 * dpToPx
